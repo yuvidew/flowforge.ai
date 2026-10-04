@@ -1,9 +1,13 @@
+import { requireUnAuth } from "@/lib/auth-utils";
 import { SignIn } from "@clerk/nextjs";
 
-export default function SignInPage() {
+const SignInPage = async () => {
+  await requireUnAuth();
   return (
-    <main style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#09090b' }}>
+    <main className="flex items-center justify-center h-screen">
       <SignIn />
     </main>
   );
-}
+};
+
+export default SignInPage;
