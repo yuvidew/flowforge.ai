@@ -3,6 +3,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getGreeting } from '@/lib/utils'
 import { useUser } from '@clerk/nextjs'
 import { PlusIcon } from 'lucide-react'
+import { useNewBoardState } from '@/hooks/use-new-board-state'
 
 /**
  * @component BranerSection
@@ -10,6 +11,9 @@ import { PlusIcon } from 'lucide-react'
  */
 export const AllFilesHeader = () => {
     const { user, isLoaded } = useUser()
+
+    // Opens the shared new-board dialog (mounted once in the root layout).
+    const onOpen = useNewBoardState((state) => state.onOpen)
 
     // First name only keeps the greeting friendly; falls back to username while Clerk loads.
     const name = user?.firstName ?? user?.username ?? ""
@@ -28,8 +32,7 @@ export const AllFilesHeader = () => {
                     Pick up where you left off, or start a fresh board for your next idea.
                 </p>
             </div>
-            {/* TODO: wire to the create-board mutation once the boards API exists. */}
-            <Button className="shrink-0">
+            <Button className="shrink-0" onClick={onOpen}>
                 <PlusIcon />
                 New board
             </Button>

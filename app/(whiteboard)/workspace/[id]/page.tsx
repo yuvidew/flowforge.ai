@@ -1,0 +1,17 @@
+import { WorkSpace, WorkspaceError, WorkspaceLoading, WorkspaceView } from '@/features/workspace/_components/workspace-view'
+import { Suspense } from 'react'
+import { ErrorBoundary } from 'react-error-boundary';
+
+const WorkspaceId = () => {
+  return (
+    <WorkspaceView>
+      <ErrorBoundary fallback={<WorkspaceError />}>
+        <Suspense fallback={<WorkspaceLoading />}>
+          <WorkSpace/>
+        </Suspense>
+      </ErrorBoundary>
+    </WorkspaceView>
+  )
+}
+
+export default WorkspaceId;

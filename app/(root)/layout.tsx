@@ -6,6 +6,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { ModeToggle } from "@/components/mode-toggle";
+import { NewBoardDialog } from "@/components/new-board-dialog";
 import { UserButton } from "@clerk/nextjs";
 
 // Mirrors the check in proxy.ts — lets local dev run without Clerk keys
@@ -46,6 +47,8 @@ const DashboardLayout = async ({
         <main className="flex w-full flex-1 flex-col">
          {children}
         </main>
+        {/* Single shared instance; opened via useNewBoardState from any button. */}
+        <NewBoardDialog />
       </SidebarInset>
     </SidebarProvider>
   )

@@ -6,6 +6,7 @@ import { EntityContainer } from "@/components/entity-components/entity-container
 import { EntitySearch } from "@/components/entity-components/entity-search"
 import { EntityPagination } from "@/components/entity-components/entity-pagination"
 import { AllFilesHeader } from "./all-files-header"
+import { useNewBoardState } from "@/hooks/use-new-board-state"
 import { EntityEmptyView } from "@/components/entity-components/entity-empty-view"
 import { EntityList } from "@/components/entity-components/entity-list"
 import { EntityItem } from "@/components/entity-components/entity-item"
@@ -32,13 +33,15 @@ export const AllFilesError = () => {
  * @description Empty state shown when the user has no board files yet, with a prompt to create the first one.
  */
 export const AllFilesView = () => {
+    // Opens the shared new-board dialog from the empty state's create button.
+    const onOpen = useNewBoardState((state) => state.onOpen)
 
     return (
         <>
             <EntityEmptyView
                 message="You haven't created any boards yet. Get started by creating your first board."
                 isLoading = {false}
-                onNew={() => {}}
+                onNew={onOpen}
             />
         </>
     )
