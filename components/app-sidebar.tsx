@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sidebar"
 import { CreateNewBoard } from "./create-new-board"
 import { Createds } from "./createds"
+import { Logo } from "./logo"
 
 // Top-level routes served under the (root) layout.
 const navMain = [
@@ -42,9 +43,7 @@ export const AppSidebar = ({ ...props }: React.ComponentProps<typeof Sidebar>) =
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="pointer-events-none">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <ShapesIcon className="size-4" />
-              </div>
+              <Logo/>
               <span className="truncate font-medium">FlowForge</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
