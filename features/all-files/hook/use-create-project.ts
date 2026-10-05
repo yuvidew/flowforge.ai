@@ -16,7 +16,7 @@ export const useCreateProject = () => {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ["get-projects"] })
             toast.add({ title: `${data.projectName} board is created`, type: "success" })
-            router.push(`/workspace/${data.id}`)
+            router.push(`/workspace/${data.projectId}`)
         },
         onError: (error) => {
             toast.add({
