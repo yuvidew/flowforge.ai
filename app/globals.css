@@ -135,3 +135,42 @@
     cursor: pointer;
   }
 }
+
+/* Excalidraw whiteboard — bind its UI variables to the app's shadcn tokens so it follows the light/dark theme.
+   The second selector out-ranks Excalidraw's own `.excalidraw.theme--dark` block. */
+.flowforge-whiteboard .excalidraw,
+.flowforge-whiteboard .excalidraw.theme--dark {
+  --color-primary: var(--sidebar-primary);
+  --color-primary-darker: color-mix(in oklch, var(--sidebar-primary) 85%, black);
+  --color-primary-darkest: color-mix(in oklch, var(--sidebar-primary) 70%, black);
+  --color-primary-hover: color-mix(in oklch, var(--sidebar-primary) 85%, white);
+  --color-primary-light: color-mix(in oklch, var(--sidebar-primary) 15%, var(--card));
+  --color-primary-light-darker: color-mix(in oklch, var(--sidebar-primary) 25%, var(--card));
+  --color-primary-contrast-offset: var(--sidebar-primary);
+  --color-selection: var(--sidebar-primary);
+
+  --island-bg-color: var(--card);
+  --popup-bg-color: var(--popover);
+  --popup-secondary-bg-color: var(--muted);
+  --popup-text-color: var(--popover-foreground);
+  --sidebar-bg-color: var(--sidebar);
+  --sidebar-border-color: var(--sidebar-border);
+  --default-bg-color: var(--background);
+  --input-bg-color: var(--background);
+  --input-border-color: var(--input);
+  --input-hover-bg-color: var(--accent);
+  --input-label-color: var(--muted-foreground);
+  --button-hover-bg: var(--accent);
+  --default-border-color: var(--border);
+  --dialog-border-color: var(--border);
+  --text-primary-color: var(--foreground);
+  --icon-fill-color: var(--foreground);
+  --color-danger: var(--destructive);
+  --focus-highlight-color: var(--ring);
+  --link-color: var(--sidebar-primary);
+}
+
+.flowforge-whiteboard .excalidraw .Island,
+.flowforge-whiteboard .excalidraw .island {
+  border-radius: var(--radius-lg);
+}
