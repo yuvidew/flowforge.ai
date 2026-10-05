@@ -43,7 +43,7 @@ const DashboardLayout = async ({
             <UserButton/>
           </div>
         </header>
-        <main className="w-full">
+        <main className="flex w-full flex-1 flex-col">
          {children}
         </main>
       </SidebarInset>
