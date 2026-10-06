@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FloatingBox, type ElementPatch } from "./workspace-floating-box";
+import { WorkspaceAiFloatingSidebar } from "./workspace-ai-floating-sidebar";
+import { isLoadingElement } from "../ai/loading-card";
 
 const Excalidraw = dynamic(
   async () => (await import("@excalidraw/excalidraw")).Excalidraw,
@@ -137,7 +139,9 @@ export const WorkspaceWhiteboard = () => {
       selectedIds.length === 1 ? (elements.find((el) => el.id === selectedIds[0]) ?? null) : null,
     );
 
-    const signature = getSceneSignature(elements, files);
+    // The temporary "Generating with AI" card must never be saved (or trigger a save while it pulses).
+    const persisted = elements.filter((el) => !isLoadingElement(el.id));
+    const signature = getSceneSignature(persisted, files);
     if (signature === lastSignature.current) return;
 
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
@@ -146,7 +150,7 @@ export const WorkspaceWhiteboard = () => {
       lastSignature.current = signature;
       save({
         projectId,
-        elements: [...elements],
+        elements: persisted,
         appState: pickSavedAppState(appState),
         files,
       });
@@ -261,29 +265,6 @@ export const WorkspaceWhiteboard = () => {
   };
 
 
-  const getFlotingPostion = () => {
-    if (!selectedElement || !canvasState) {
-      return { left: 0, top: 0 }
-    }
-
-    const zoom = canvasState.zoom?.value ?? 1;
-    const scrollX = canvasState.scrollX ?? 0;
-    const scrollY = canvasState.scrollY ?? 0;
-
-    // center of selected element
-    const centerX = selectedElement.x + selectedElement.width / 2
-
-    // canvas excadlidaw coordinates into browser cordinates
-    const screenX = (centerX + scrollX) * zoom;
-    const screenY = (selectedElement.y + scrollY) * zoom;
-
-    return {
-      left: screenX,
-      top: screenY - 60
-    }
-
-  };
-
 
   // The status views center themselves via h-full, so they need a parent with the canvas' height.
   if (isPending || isError) {
@@ -344,6 +325,8 @@ export const WorkspaceWhiteboard = () => {
           );
         })}
       </div>
+
+      <WorkspaceAiFloatingSidebar excalidrawApi={excalidrawApi} />
     </div>
   );
 };
