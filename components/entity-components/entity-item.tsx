@@ -88,14 +88,16 @@ export const EntityItem = ({
 
                             {onRemove && (
                                 <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button 
-                                            size={"icon"}
-                                            variant={"ghost"}
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <MoreVerticalIcon className=' size-4'/>
-                                        </Button>
+                                    <DropdownMenuTrigger
+                                        render={
+                                            <Button
+                                                size={"icon"}
+                                                variant={"ghost"}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        }
+                                    >
+                                        <MoreVerticalIcon className=' size-4'/>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"

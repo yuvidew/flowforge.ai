@@ -1,6 +1,7 @@
 import { WorkSpace, WorkspaceError, WorkspaceLoading, WorkspaceView } from '@/features/workspace/_components/workspace-view'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary';
+import "./index.css"
 
 const WorkspaceId = () => {
   return (

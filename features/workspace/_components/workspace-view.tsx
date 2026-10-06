@@ -26,8 +26,9 @@ export const WorkspaceError = () => {
 
 export const WorkSpace = () => {
   const [activeTab, setActiveTab] = useState<TabsType>("whiteboard");
+  // Fills the viewport: header keeps its natural height, the active tab takes the rest.
   return (
-    <div>
+    <div className="flex h-dvh flex-col">
       <WorkspaceHeader selectTab={activeTab} onSelectTab={setActiveTab} />
       {activeTab == "whiteboard" ? <WorkspaceWhiteboard/> : <WorkspaceSmartDoc/>}
     </div>

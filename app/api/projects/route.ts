@@ -41,7 +41,7 @@ export const POST = async (req: NextRequest) => {
     }
 };
 
-export const GET = async (req: NextRequest, res: NextResponse) => {
+export const GET = async (req: NextRequest) => {
     try {
         const user = await currentUser();
     } catch (error) {
