@@ -1,5 +1,6 @@
 import { api } from "@/lib/axios"
-import type { SaveWhiteboardRequest, WhiteboardResponse } from "../types/types"
+import type { GenerateDiagramRequest, SaveWhiteboardRequest, WhiteboardResponse } from "../types/types"
+import type { DiagramSpec } from "../ai/diagram-schema"
 
 // Fetches the saved whiteboard for a project.
 export const getWhiteboard = async (projectId: string) => {
@@ -10,5 +11,11 @@ export const getWhiteboard = async (projectId: string) => {
 // Saves (upserts) the whiteboard for a project.
 export const saveWhiteboard = async (values: SaveWhiteboardRequest) => {
     const { data } = await api.post<{ success: boolean }>("/whiteboard", values)
+    return data
+}
+
+// Asks the server to generate a diagram spec for the AI Helper (model calls can take a while, hence the long timeout).
+export const generateDiagram = async (values: GenerateDiagramRequest) => {
+    const { data } = await api.post<DiagramSpec>("/ai/generate", values, { timeout: 120_000 })
     return data
 }

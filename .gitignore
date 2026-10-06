@@ -35,3 +35,5 @@ next-env.d.ts
 
 
 issue-img
+# local AI test requests
+test-queries.json

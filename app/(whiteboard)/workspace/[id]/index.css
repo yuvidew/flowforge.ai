@@ -9,3 +9,7 @@
 .excalidraw .sidebar-trigger__label-element{
     display: none !important;
 }
+
+.excalidraw .App-menu_top{
+    display: none !important;
+}
