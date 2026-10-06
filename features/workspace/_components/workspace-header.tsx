@@ -19,7 +19,7 @@ export const WorkspaceHeader = ({onSelectTab, selectTab}: Props) => {
             </div>
 
             {/* switch */}
-            <div className="flex items-center justify-center border">
+            <div className="flex items-center justify-center">
                 <Tabs defaultValue={selectTab} onValueChange={onSelectTab} >
                     <TabsList>
                         <TabsTrigger value="whiteboard">Whiteboard</TabsTrigger>

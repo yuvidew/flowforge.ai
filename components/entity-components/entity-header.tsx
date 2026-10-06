@@ -68,12 +68,11 @@ export const EntityHeader = ({
             {!onNew && newButtonHref && (
                 <Button
                     size={"sm"}
-                    asChild
+                    nativeButton={false}
+                    render={<Link href={newButtonHref} />}
                 >
-                    <Link href={newButtonHref}>
-                        <PlusIcon className=' size-4' />
-                        {newButtonLabel}
-                    </Link>
+                    <PlusIcon className=' size-4' />
+                    {newButtonLabel}
                 </Button>
             )}
         </div>
