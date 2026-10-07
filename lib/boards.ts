@@ -1,0 +1,90 @@
+import { db, projects, whiteboardData } from "@/db";
+import { COVER_IMAGES } from "@/features/all-files/constants";
+import type { PendingDiagram } from "@/features/workspace/types/types";
+import { and, eq, sql } from "drizzle-orm";
+
+// Active boards of a user whose name matches exactly, ignoring case. Limit 2 is enough to tell "ambiguous" from "unique".
+export const findBoardsByName = (email: string, name: string) =>
+    db
+        .select()
+        .from(projects)
+        .where(
+            and(
+                eq(projects.userEmail, email),
+                eq(projects.isArchived, false),
+                sql`lower(${projects.projectName}) = ${name.trim().toLowerCase()}`,
+            ),
+        )
+        .limit(2);
+
+// A board by id, only if it belongs to the user.
+export const getOwnedBoard = async (email: string, boardId: string) => {
+    const [row] = await db
+        .select()
+        .from(projects)
+        .where(
+            and(
+                eq(projects.projectId, boardId),
+                eq(projects.userEmail, email)
+            )
+        )
+        .limit(1);
+
+    return row ?? null;
+}
+
+// Creates a board the same way POST /api/projects does.
+export const createBoardForUser = async (email: string, name: string) => {
+    const [row] = await db
+        .insert(projects)
+        .values({
+            projectId: crypto.randomUUID(),
+            projectName: name,
+            userEmail: email,
+            coverImage: COVER_IMAGES[Math.floor(Math.random() * COVER_IMAGES.length)],
+        })
+        .returning();
+    return row;
+}
+
+// Appends a diagram to the board's queue in one statement (creating the whiteboard row if the board was never saved),
+// so concurrent calls and the browser's ack can't overwrite each other.
+export const queueDiagram = async (boardId: string, item: PendingDiagram) => {
+    const added = JSON.stringify([item]);
+
+    await db
+        .insert(whiteboardData)
+        .values({ projectId: boardId, pendingDiagrams: [item] })
+        .onConflictDoUpdate({
+            target: whiteboardData.projectId,
+            set: { pendingDiagrams: sql`COALESCE(${whiteboardData.pendingDiagrams}, '[]'::jsonb) || ${added}::jsonb` },
+        });
+};
+
+// Sets the board's published flag; returns the updated board, or null if it isn't the user's.
+export const setBoardPublished = async (email: string, boardId: string, isPublished: boolean) => {
+  const [row] = await db
+    .update(projects)
+    .set({ isPublished })
+    .where(and(eq(projects.projectId, boardId), eq(projects.userEmail, email)))
+    .returning();
+  return row ?? null;
+};
+
+// How many MCP diagrams are still waiting to be drawn in the browser (they are not on the public page yet).
+export const countPendingDiagrams = async (boardId: string) => {
+  const [row] = await db
+    .select({ pending: whiteboardData.pendingDiagrams })
+    .from(whiteboardData)
+    .where(eq(whiteboardData.projectId, boardId))
+    .limit(1);
+  return Array.isArray(row?.pending) ? row.pending.length : 0;
+};
+
+// SQL expression for a board's pending queue minus the given ids. Used inside an UPDATE / ON CONFLICT so removal
+// is one atomic statement (a diagram queued meanwhile is never lost, and the Neon HTTP driver has no transactions).
+export const withoutPendingIds = (ids: string[]) => {
+  const idList = sql.join(ids.map((id) => sql`${id}`), sql`, `);
+  return sql`COALESCE((SELECT jsonb_agg(item) FROM jsonb_array_elements(${whiteboardData.pendingDiagrams}) AS item WHERE item->>'id' NOT IN (${idList})), '[]'::jsonb)`;
+};
+
