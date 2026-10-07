@@ -1,6 +1,6 @@
 import { api } from "@/lib/axios"
 import type { Project } from "@/features/all-files/types"
-import type { GenerateDiagramRequest, PublicWhiteboardResponse, SaveWhiteboardRequest, WhiteboardResponse } from "../types/types"
+import type { AckPendingDiagramsRequest, GenerateDiagramRequest, PendingDiagramsResponse, PublicWhiteboardResponse, SaveWhiteboardRequest, WhiteboardResponse } from "../types/types"
 import type { DiagramSpec } from "../ai/diagram-schema"
 
 // Fetches the saved whiteboard for a project.
@@ -32,3 +32,16 @@ export const getPublicWhiteboard = async (projectId: string) => {
     const { data } = await api.get<PublicWhiteboardResponse>("/public/whiteboard", { params: { projectId } })
     return data
 }
+
+// Fetches the diagrams the MCP server has queued for a board.
+export const getPendingDiagrams = async (projectId: string) => {
+    const { data } = await api.get<PendingDiagramsResponse>("/whiteboard/pending", { params: { projectId } })
+    return data
+}
+
+// Tells the server which queued diagrams are now drawn, so they are removed from the queue.
+export const ackPendingDiagrams = async (values: AckPendingDiagramsRequest) => {
+    const { data } = await api.post<{ success: boolean }>("/whiteboard/pending", values)
+    return data
+}
+

@@ -28,7 +28,7 @@ export const PublishedWhiteboard = () => {
   // The status views center themselves via h-full, so they need a parent with the canvas' height.
   if (isPending || isError) {
     return (
-      <div className="flex min-h-0 flex-1">
+      <div className="flex h-dvh flex-col">
         {isPending ? (
           <LoadingView message="Loading whiteboard..." />
         ) : (

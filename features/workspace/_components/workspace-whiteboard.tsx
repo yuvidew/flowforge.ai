@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import "@excalidraw/excalidraw/index.css";
@@ -9,6 +9,8 @@ import { ErrorView } from "@/components/error-view";
 import { LoadingView } from "@/components/loading-view";
 import { useWhiteboard } from "../hook/use-whiteboard";
 import { useSaveWhiteboard } from "../hook/use-save-whiteboard";
+import { useApplyPendingDiagrams } from "../hook/use-apply-pending-diagrams";
+
 import {
   ArrowRightIcon,
   CircleIcon,
@@ -16,8 +18,6 @@ import {
   EraserIcon,
   HandIcon,
   ImageIcon,
-  LockIcon,
-  LockOpenIcon,
   MinusIcon,
   MousePointer2Icon,
   PencilIcon,
@@ -107,6 +107,9 @@ export const WorkspaceWhiteboard = () => {
   // Latest Excalidraw appState snapshot.
   const [canvasState, setCanvasState] = useState<Parameters<OnChange>[1] | null>(null);
 
+  const { mutateAsync: saveAsync } = useSaveWhiteboard();
+
+
   // Debounce timer id — cleared on unmount to avoid saving after leaving the page.
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Signature of the last saved/loaded scene; null until the board has loaded.
@@ -117,6 +120,17 @@ export const WorkspaceWhiteboard = () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
   }, []);
+
+  // Ids of MCP diagrams that are on the canvas but not yet confirmed saved; they ride along with the next autosave.
+  const ackIds = useRef<string[]>([]);
+  // Stable callback (it only touches a ref) so the apply hook's effect doesn't re-run on every render.
+  const queueAck = useCallback((ids: string[]) => {
+    ackIds.current.push(...ids);
+  }, []);
+
+  // Draws diagrams the MCP server queued for this board.
+  useApplyPendingDiagrams(projectId, excalidrawApi, queueAck);
+
 
   // Excalidraw fires onChange on mount, so seed the signature from the loaded board to skip that first call.
   if (data && lastSignature.current === null) {
@@ -146,15 +160,26 @@ export const WorkspaceWhiteboard = () => {
 
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
 
-    saveTimeout.current = setTimeout(() => {
+        saveTimeout.current = setTimeout(() => {
       lastSignature.current = signature;
-      save({
+
+      // Snapshot of the ids to clear with this save; they stay in the ref until the save is confirmed.
+      const sentIds = [...ackIds.current];
+
+      saveAsync({
         projectId,
         elements: persisted,
         appState: pickSavedAppState(appState),
         files,
-      });
+        ackPendingIds: sentIds.length > 0 ? sentIds : undefined,
+      })
+        .then(() => {
+          ackIds.current = ackIds.current.filter((id) => !sentIds.includes(id));
+        })
+        // The hook already shows the error toast; the ids stay queued and go out with the next save.
+        .catch(() => {});
     }, SAVE_DEBOUNCE_MS);
+
   };
 
   // Applies a property patch to the selected element. Bumps version/versionNonce (as Excalidraw does internally)
@@ -176,12 +201,12 @@ export const WorkspaceWhiteboard = () => {
       elements: excalidrawApi.getSceneElements().map((el) =>
         el.id === selectedElement.id
           ? ({
-              ...el,
-              ...next,
-              version: el.version + 1,
-              versionNonce: Math.floor(Math.random() * 2 ** 31),
-              updated: Date.now(),
-            } as typeof el)
+            ...el,
+            ...next,
+            version: el.version + 1,
+            versionNonce: Math.floor(Math.random() * 2 ** 31),
+            updated: Date.now(),
+          } as typeof el)
           : el,
       ),
     });

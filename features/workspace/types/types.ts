@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import type { generateDiagramSchema, saveWhiteboardSchema } from "../schema"
+import type { ackPendingDiagramsSchema, generateDiagramSchema, pendingDiagramSchema, saveWhiteboardSchema } from "../schema"
 
 export type TabsType = "whiteboard" | "doc"
 
@@ -7,10 +7,20 @@ export type TabsType = "whiteboard" | "doc"
 export type SaveWhiteboardRequest = z.infer<typeof saveWhiteboardSchema>
 
 // Saved whiteboard as returned by GET /api/whiteboard.
-export type WhiteboardResponse = Omit<SaveWhiteboardRequest, "projectId">
+export type WhiteboardResponse = Omit<SaveWhiteboardRequest, "projectId" | "ackPendingIds">
 
 // Published board as returned by GET /api/public/whiteboard.
 export type PublicWhiteboardResponse = WhiteboardResponse & { projectName: string }
 
 // Body sent to POST /api/ai/generate.
 export type GenerateDiagramRequest = z.infer<typeof generateDiagramSchema>
+
+// A diagram queued by the MCP server (spec + the mode it was written for).
+export type PendingDiagram = z.infer<typeof pendingDiagramSchema>
+
+// Body sent to POST /api/whiteboard/pending.
+export type AckPendingDiagramsRequest = z.infer<typeof ackPendingDiagramsSchema>
+
+// Queue as returned by GET /api/whiteboard/pending.
+export type PendingDiagramsResponse = { pending: PendingDiagram[] }
+

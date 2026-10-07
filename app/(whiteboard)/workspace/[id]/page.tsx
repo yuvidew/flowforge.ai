@@ -2,8 +2,10 @@ import { WorkSpace, WorkspaceError, WorkspaceLoading, WorkspaceView } from '@/fe
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary';
 import "./index.css"
+import { requireAuth } from '@/lib/auth-utils';
 
-const WorkspaceId = () => {
+const WorkspaceId = async () => {
+  await requireAuth();
   return (
     <WorkspaceView>
       <ErrorBoundary fallback={<WorkspaceError />}>

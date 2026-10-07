@@ -30,8 +30,14 @@ export const whiteboardData = pgTable("whiteboardData", {
   elements: jsonb("elements"),
   appState: jsonb("appState"),
   files: jsonb("files"),
+  // Diagram specs queued by the MCP server; the open workspace converts them to Excalidraw elements and clears them.
+  pendingDiagrams: jsonb("pendingDiagrams"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+
 });
+
+
+
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
