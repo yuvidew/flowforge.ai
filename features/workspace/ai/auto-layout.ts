@@ -68,7 +68,7 @@ export const autoLayout = (spec: DiagramSpec, mode: AiModeId) => {
   spec.edges.forEach((edge, index) => {
     if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) return;
     const points = graph.edge(edge.from, edge.to, String(index))?.points;
-    if (points && points.length >= 2) routes[index] = points.map(({ x, y }) => ({ x, y }));
+    if (points && points.length >= 2) routes[index] = points.map(({ x, y }: { x: number; y: number }) => ({ x, y }));
   });
 
   // Free-floating texts have no meaningful position any more; stack them under the diagram (legend / notes).

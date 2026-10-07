@@ -2,7 +2,7 @@
 
 import { useClerk, useUser } from "@clerk/nextjs"
 import { useState } from "react"
-import { ChevronsUpDownIcon, LogOutIcon, SettingsIcon } from "lucide-react"
+import { ChevronsUpDownIcon, LogOutIcon, PlugIcon, SettingsIcon } from "lucide-react"
 
 import {
   Avatar,
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { ConnectMcpDialog } from "@/features/connect-mcp/_components/connect-mcp-dialog"
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -46,6 +47,8 @@ export const NavUser = () => {
 
   // Controls the settings dialog; it lives outside the dropdown so it survives the menu closing.
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Controls the Connect to MCP dialog; same reason as above.
+  const [connectOpen, setConnectOpen] = useState(false)
 
   // Display values derived from the Clerk user, with safe fallbacks while loading.
   const name = user?.fullName ?? user?.username ?? "User"
@@ -96,6 +99,10 @@ export const NavUser = () => {
               <SettingsIcon />
               Settings
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setConnectOpen(true)}>
+              <PlugIcon />
+              Connect to MCP
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => signOut({ redirectUrl: "/sign-in" })}>
               <LogOutIcon />
               Log out
@@ -103,6 +110,7 @@ export const NavUser = () => {
           </DropdownMenuContent>
         </DropdownMenu>
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        <ConnectMcpDialog open={connectOpen} onOpenChange={setConnectOpen} />
       </SidebarMenuItem>
     </SidebarMenu>
   )

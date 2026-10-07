@@ -9,15 +9,9 @@ FlowForge is a whiteboard app (Excalidraw canvas). Its MCP server lets an AI ass
 
 ## Connect
 
-The server is a remote (streamable HTTP) MCP server at `<APP_URL>/api/mcp`, protected by Clerk OAuth. There are no API keys: the client opens a browser window and the user signs in to FlowForge and approves access.
+The server is a remote (streamable HTTP) MCP server at `https://flowforge-ai-nine.vercel.app/api/mcp`, protected by Clerk OAuth. There are no API keys: the client opens a browser window and the user signs in to FlowForge and approves access.
 
-| Client | How |
-|---|---|
-| Claude Code | `claude mcp add --transport http flowforge <APP_URL>/api/mcp`, then `/mcp` -> `flowforge` -> **Authenticate** |
-| OpenCode / Cursor / others | Add a remote MCP server with the same URL and let the client run its OAuth flow (check that client's docs for the exact config key) |
-| ChatGPT / claude.ai web | Add a custom connector with the public HTTPS URL (only works on a deployed app, not `localhost`) |
-
-Local development: `<APP_URL>` is `http://localhost:3000` and `npm run dev` must be running. The user must be signed in to the same FlowForge account in the browser to see the result.
+If the `flowforge` tools are not available yet, or the user asks how to connect a specific client (Claude Code, OpenCode, Cursor, VS Code, claude.ai, ChatGPT), use the `flowforge-connect` skill for exact steps and troubleshooting. The user must be signed in to the same FlowForge account in the browser to see the result.
 
 ## Ground rules
 

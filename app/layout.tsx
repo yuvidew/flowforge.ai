@@ -11,8 +11,8 @@ import RoolLayoutProvider from '@/components/providers/root-layout-provider';
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Next.js Premium Startup Boilerplate",
-  description: "Created using the ultimate interactive Next.js stack generator CLI.",
+  title: "FlowForge AI – AI Diagram & Whiteboard Maker",
+  description: "Describe an idea and FlowForge AI draws flowcharts, architecture diagrams and wireframes on a collaborative whiteboard.",
 };
 
 
