@@ -9,6 +9,8 @@ export type SaveWhiteboardRequest = z.infer<typeof saveWhiteboardSchema>
 // Saved whiteboard as returned by GET /api/whiteboard.
 export type WhiteboardResponse = Omit<SaveWhiteboardRequest, "projectId">
 
+// Published board as returned by GET /api/public/whiteboard.
+export type PublicWhiteboardResponse = WhiteboardResponse & { projectName: string }
 
 // Body sent to POST /api/ai/generate.
 export type GenerateDiagramRequest = z.infer<typeof generateDiagramSchema>

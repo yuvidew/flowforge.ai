@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, varchar, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, varchar, jsonb, boolean } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -15,6 +15,12 @@ export const projects = pgTable("projects", {
   projectId: varchar("projectId").notNull().unique(),
   projectName: varchar("projectName").notNull(),
   userEmail: varchar("userEmail").notNull(),
+  // File name inside public/cover (e.g. "blue.png"), picked randomly at creation; null for older rows.
+  coverImage: varchar("coverImage"),
+  // Archived boards are hidden from the all-files grid but kept in the DB.
+  isArchived: boolean("isArchived").notNull().default(false),
+  // When true, anyone with the link can view the board read-only at /view/[projectId].
+  isPublished: boolean("isPublished").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

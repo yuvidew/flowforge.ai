@@ -4,9 +4,6 @@ import * as React from "react"
 import {
   ArchiveIcon,
   FilesIcon,
-  HistoryIcon,
-  ShapesIcon,
-  Share2Icon,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -22,13 +19,11 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { CreateNewBoard } from "./create-new-board"
-import { Createds } from "./createds"
 import { Logo } from "./logo"
 
 // Top-level routes served under the (root) layout.
 const navMain = [
   { title: "All Files", url: "/all-files", icon: <FilesIcon className="size-5" /> },
-  { title: "Shared", url: "/shared", icon: <Share2Icon className="size-5" /> },
   { title: "Archived", url: "/archived", icon: <ArchiveIcon className="size-5" /> },
 ]
 
@@ -43,7 +38,8 @@ export const AppSidebar = ({ ...props }: React.ComponentProps<typeof Sidebar>) =
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="pointer-events-none">
-              <Logo/>
+              {/* Not interactive: it already sits inside a SidebarMenuButton (a <button>). */}
+              <Logo interactive={false} />
               <span className="truncate font-medium">FlowForge</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -54,7 +50,6 @@ export const AppSidebar = ({ ...props }: React.ComponentProps<typeof Sidebar>) =
         <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter>
-        <Createds/>
         <NavUser />
       </SidebarFooter>
       <SidebarRail />

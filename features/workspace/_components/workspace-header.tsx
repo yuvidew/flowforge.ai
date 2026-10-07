@@ -1,43 +1,61 @@
+"use client";
+
+import { useState } from "react";
+import { useParams } from "next/navigation";
+import { useIsMutating } from "@tanstack/react-query";
+import { Spinner } from "@/components/ui/spinner";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TabsType } from "../types/types";
-import { SaveIcon, Share2Icon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Globe2Icon, SaveIcon } from "lucide-react";
+import { useProject } from "../hook/use-project";
+import { WorkspaceNameInput } from "./workspace-name-input";
+import { WorkspacePublishDialog } from "./workspace-publish-dialog";
 
-interface Props {
-    onSelectTab: (value: TabsType) => void;
-    selectTab: TabsType
-}
+/**
+ * @component WorkspaceHeader
+ * @description Top bar of the workspace: logo, the board's name, and the Save / Publish actions. Publish opens the publish dialog and reflects the board's published state.
+ */
+export const WorkspaceHeader = () => {
+    const { id: projectId } = useParams<{ id: string }>();
+    const { data: project, isPending } = useProject(projectId);
+    const [publishOpen, setPublishOpen] = useState(false);
+    // True while the whiteboard autosave mutation (see useSaveWhiteboard) is in flight.
+    const isSaving = useIsMutating({ mutationKey: ["save-whiteboard"] }) > 0;
 
-export const WorkspaceHeader = ({onSelectTab, selectTab}: Props) => {
     return (
         <header className="p-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
                 <Logo />
 
-                <h2>Workspace name</h2>
-            </div>
-
-            {/* switch */}
-            <div className="flex items-center justify-center">
-                <Tabs defaultValue={selectTab} onValueChange={onSelectTab} >
-                    <TabsList>
-                        <TabsTrigger value="whiteboard">Whiteboard</TabsTrigger>
-                        <TabsTrigger value="doc">Doc</TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                {isPending || !project ? (
+                    <Skeleton className="h-8 w-48" />
+                ) : (
+                    <WorkspaceNameInput projectId={projectId} savedName={project.projectName} />
+                )}
             </div>
 
             {/* extra button */}
             <div className="flex items-center gap-2">
-                <Button>
-                   <SaveIcon/> Save
+                <Button disabled={isSaving}>
+                   {isSaving ? <Spinner /> : <SaveIcon />}
+                   {isSaving ? "Saving…" : "Save"}
                 </Button>
 
-                <Button variant={"outline"} >
-                   <Share2Icon/> Save
+                <Button variant={"outline"} disabled={!project} onClick={() => setPublishOpen(true)}>
+                   <Globe2Icon className={project?.isPublished ? "text-green-600" : undefined} />
+                   {project?.isPublished ? "Published" : "Publish"}
                 </Button>
             </div>
+
+            {project && (
+                <WorkspacePublishDialog
+                    projectId={projectId}
+                    isPublished={project.isPublished}
+                    open={publishOpen}
+                    onOpenChange={setPublishOpen}
+                />
+            )}
         </header>
     );
 };

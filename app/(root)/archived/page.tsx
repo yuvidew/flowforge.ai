@@ -1,22 +1,23 @@
-import { AllFilesContainer, AllFilesError, AllFilesList, AllFilesLoading } from "@/features/all-files/_components/all-files-view";
+import { ArchivedContainer } from "@/features/all-files/_components/archived-view";
+import { BoardsList } from "@/features/all-files/_components/boards-view";
+import { AllFilesError, AllFilesLoading } from "@/features/all-files/_components/all-files-view";
 import { requireAuth } from "@/lib/auth-utils";
 import { ErrorBoundary } from "react-error-boundary";
 import { Suspense } from "react";
 
-
-const HomePage = async () => {
+const ArchivedPage = async () => {
   await requireAuth();
 
   return (
     // Suspense is required because the search/pagination read the URL via useSearchParams.
     <Suspense fallback={<AllFilesLoading />}>
-      <AllFilesContainer>
+      <ArchivedContainer>
         <ErrorBoundary fallback={<AllFilesError />}>
-          <AllFilesList />
+          <BoardsList archived />
         </ErrorBoundary>
-      </AllFilesContainer>
+      </ArchivedContainer>
     </Suspense>
   );
 }
 
-export default HomePage;
+export default ArchivedPage;
