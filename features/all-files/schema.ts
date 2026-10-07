@@ -10,3 +10,24 @@ export const newBoardSchema = z.object({
 })
 
 export type NewBoardValues = z.infer<typeof newBoardSchema>
+
+// PATCH /api/projects/[projectId] body: at least one of a new name, the archived flag or the published flag.
+export const updateProjectSchema = z
+    .object({
+        name: newBoardSchema.shape.name.optional(),
+        isArchived: z.boolean().optional(),
+        isPublished: z.boolean().optional(),
+    })
+    .refine((v) => v.name !== undefined || v.isArchived !== undefined || v.isPublished !== undefined, {
+        message: "Nothing to update",
+    })
+
+export type UpdateProjectValues = z.infer<typeof updateProjectSchema>
+
+// GET /api/projects query string: archived filter, name search and pagination.
+export const projectsQuerySchema = z.object({
+    archived: z.enum(["true", "false"]).default("false"),
+    search: z.string().trim().max(50).default(""),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(12),
+})
