@@ -34,3 +34,22 @@ export type PendingEdit = z.infer<typeof pendingEditSchema>
 export type PendingItem = PendingDiagram | PendingEdit
 
 
+// The few fields we read from an Excalidraw element (the real element has many more).
+// Works for elements saved in the database and for live ones from the canvas.
+export type SavedElement = {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text?: string;
+  containerId?: string | null;
+  backgroundColor?: string;
+  strokeColor?: string;
+  isDeleted?: boolean;
+  startBinding?: { elementId: string } | null;
+  endBinding?: { elementId: string } | null;
+  customData?: { nodeId?: string; diagramId?: string };
+};
+
