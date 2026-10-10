@@ -30,6 +30,37 @@ export const pendingDiagramSchema = z.object({
     createdAt: z.string(),
 });
 
+// One change to a shape that was drawn by FlowForge; the shape is found by its diagramId + nodeId.
+export const editOpSchema = z.discriminatedUnion("op", [
+    z.object({
+        op: z.literal("update_text"),
+        diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
+        nodeId: z.string().min(1).describe("nodeId from get_board_scene"),
+        text: z.string().max(200).describe("New label for the shape"),
+    }),
+    z.object({
+        op: z.literal("set_color"),
+        diagramId: z.string().min(1),
+        nodeId: z.string().min(1),
+        fill: z.string().optional().describe('Hex colour such as "#dbeafe", or "transparent"'),
+        stroke: z.string().optional().describe('Hex colour such as "#1d4ed8"'),
+    }),
+    z.object({
+        op: z.literal("delete"),
+        diagramId: z.string().min(1),
+        nodeId: z.string().min(1),
+    }),
+]);
+
+// A batch of edits queued by the MCP server; `kind` tells it apart from a queued diagram.
+export const pendingEditSchema = z.object({
+    id: z.string().min(1),
+    kind: z.literal("edit"),
+    ops: z.array(editOpSchema).min(1).max(50),
+    createdAt: z.string(),
+});
+
+
 // Body of POST /api/whiteboard/pending: ids of the queued diagrams the browser has finished drawing.
 export const ackPendingDiagramsSchema = z.object({
     projectId: z.string().min(1, "Project id is required"),
