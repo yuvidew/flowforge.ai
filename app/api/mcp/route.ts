@@ -101,7 +101,7 @@ const handler = createMcpHandler(
       {
         title: "Read what is on a board",
         description:
-          "Returns the elements currently saved on the board (shapes with their text, arrows with the shapes they connect, positions, colours). Call open_board first for the boardId. Diagrams still queued and not yet drawn in the browser are NOT included.",
+          "Returns the elements currently saved on the board (shapes with their text, arrows with the shapes they connect, positions, colours). Call open_board first for the boardId. Diagrams still queued and not yet drawn in the browser are NOT included. Shapes drawn by FlowForge carry nodeId and diagramId; older shapes have null.",
         inputSchema: z.object({ boardId: z.string().min(1).describe("boardId from open_board or create_board") }),
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
