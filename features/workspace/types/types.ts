@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import type { ackPendingDiagramsSchema, generateDiagramSchema, pendingDiagramSchema, saveWhiteboardSchema } from "../schema"
+import type { ackPendingDiagramsSchema, editOpSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, saveWhiteboardSchema } from "../schema"
 
 export type TabsType = "whiteboard" | "doc"
 
@@ -22,5 +22,15 @@ export type PendingDiagram = z.infer<typeof pendingDiagramSchema>
 export type AckPendingDiagramsRequest = z.infer<typeof ackPendingDiagramsSchema>
 
 // Queue as returned by GET /api/whiteboard/pending.
-export type PendingDiagramsResponse = { pending: PendingDiagram[] }
+export type PendingDiagramsResponse = { pending: PendingItem[] }
+
+// One edit operation (update_text / set_color / delete) aimed at a node.
+export type EditOp = z.infer<typeof editOpSchema>
+
+// A batch of edits queued by the MCP server.
+export type PendingEdit = z.infer<typeof pendingEditSchema>
+
+// Anything the MCP server can queue: a diagram to draw or edits to apply.
+export type PendingItem = PendingDiagram | PendingEdit
+
 

@@ -1,6 +1,6 @@
 import { db, projects, whiteboardData } from "@/db";
 import { COVER_IMAGES } from "@/features/all-files/constants";
-import type { PendingDiagram } from "@/features/workspace/types/types";
+import type { PendingDiagram, PendingItem } from "@/features/workspace/types/types";
 import { and, eq, sql } from "drizzle-orm";
 
 // Max elements sent to the AI; a bigger board is cut off so the reply stays small.
@@ -117,7 +117,7 @@ export const createBoardForUser = async (email: string, name: string) => {
 
 // Appends a diagram to the board's queue in one statement (creating the whiteboard row if the board was never saved),
 // so concurrent calls and the browser's ack can't overwrite each other.
-export const queueDiagram = async (boardId: string, item: PendingDiagram) => {
+export const queueDiagram = async (boardId: string, item: PendingItem) => {
     const added = JSON.stringify([item]);
 
     await db

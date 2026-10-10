@@ -17,6 +17,7 @@ import {
   queueDiagram,
   setBoardPublished,
 } from "@/lib/boards";
+import { editOpSchema } from "@/features/workspace/schema";
 
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -223,6 +224,37 @@ const handler = createMcpHandler(
         return reply(describeBoard(board));
       },
     );
+
+    server.registerTool(
+      "edit_board",
+      {
+        title: "Edit shapes already on a board",
+        description:
+          "Changes shapes drawn by FlowForge without redrawing the diagram: update_text, set_color or delete. Call get_board_scene first and use the diagramId and nodeId it returns; shapes with null ids cannot be edited. Edits are queued and applied the next time the board is open in the browser.",
+        inputSchema: z.object({
+          boardId: z.string().min(1).describe("boardId from open_board or create_board"),
+          ops: z.array(editOpSchema).min(1).max(50),
+        }),
+      },
+      async ({ boardId, ops }, ctx) => {
+        const email = getEmail(ctx.http?.authInfo);
+        if (!email) return reply("Unauthorized", true);
+        
+        const board = await getOwnedBoard(email, boardId);
+        if (!board) return reply("Board not found. Call open_board or create_board first.", true);
+
+        await queueDiagram(boardId, {
+          id: crypto.randomUUID(),
+          kind: "edit",
+          ops,
+          createdAt: new Date().toISOString(),
+        });
+
+        return reply(
+          `Queued ${ops.length} edit(s). They are applied when the board is open in the browser, so tell the user to open ${APP_URL}/workspace/${boardId}.`,
+        );
+      }
+    )
 
   },
   { serverInfo: { name: "flowforge", version: "0.1.0" } },

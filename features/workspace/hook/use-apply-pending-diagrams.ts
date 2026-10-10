@@ -5,6 +5,7 @@ import { diagramToElements } from "../ai/diagram-to-elements"
 import { findEmptyOrigin, insertDiagram } from "../ai/scene"
 import { useAckPendingDiagrams } from "./use-ack-pending-diagrams"
 import { usePendingDiagrams } from "./use-pending-diagrams"
+import { applyEdits } from "../ai/apply-edits"
 
 // Draws diagrams queued by the MCP server onto the open canvas.
 // `onDrawn` receives the ids now on the canvas; the caller sends them with the next autosave, so a diagram only
@@ -36,6 +37,12 @@ export const useApplyPendingDiagrams = (
             // Sequential on purpose: each diagram is placed to the right of the previous one.
             for (const item of queue) {
                 try {
+                    if ("ops" in item) {
+                        if (await applyEdits(excalidrawApi, item.ops)) drawn.push(item.id)
+                        else failed.push(item.id)
+                        handled.current.add(item.id)
+                        continue
+                    }
                     const origin = await findEmptyOrigin(excalidrawApi)
                     const elements = await diagramToElements(item.spec, origin, item.mode)
                     await insertDiagram(excalidrawApi, elements)

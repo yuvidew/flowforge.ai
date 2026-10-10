@@ -57,3 +57,75 @@ Where to change
   - features/workspace pending hooks (apply edit operations in the browser)
 
 Status : Part 1 done (get_board_scene), edit tool pending
+
+
+------------------------------------------------------------------------------
+ISSUE 2: Let the in-app AI Helper edit existing shapes (not only create)
+------------------------------------------------------------------------------
+Source   : Follow-up to ISSUE 1 (MCP can now read and edit a board).
+
+Current behaviour
+  - The AI Helper (workspace-ai-floating-sidebar.tsx) only creates: it calls
+    POST /api/ai/generate and always draws a NEW diagram on the canvas.
+  - A user who wants to change one box can only ask for a new diagram, which
+    duplicates the old one and can change the layout (same problem as MCP had).
+
+Problem
+  Users of FlowForge's own AI cannot say "rename this to Login" or "make the
+  error boxes red" on shapes that are already on the board.
+
+Already available (from ISSUE 1)
+  - Shapes drawn by FlowForge carry customData { nodeId, diagramId }, also the
+    ones drawn by the in-app AI (same diagramToElements function).
+  - editOpSchema (update_text, set_color, delete) in features/workspace/schema.ts.
+  - applyEdits() in features/workspace/ai/apply-edits.ts applies ops to the
+    open canvas as one undoable step.
+
+Proposed work
+  1. Share the scene compaction logic
+       - Move the element -> compact item logic out of getBoardScene
+         (lib/boards.ts) into a pure function summarizeScene(elements), used by
+         both the server and the browser.
+  2. Edit prompt
+       - New system prompt in features/workspace/ai/prompts.ts: given the
+         compact scene, the selected ids and the user's request, return only
+         { ops: EditOp[] }.
+  3. Shared model helper
+       - Extract the model fallback / timeout / error handling from
+         app/api/ai/generate/route.ts into a lib/ helper so both AI routes use
+         it (no copy-paste).
+  4. New route POST /api/ai/edit
+       - Clerk auth, zod body { prompt, scene, selectedIds }, Mistral returns
+         { ops }, response validated with editOpSchema. Errors as { error }.
+  5. Client
+       - features/workspace/api: editDiagram; hook useEditDiagram (toasts in the
+         hook, per CLAUDE.md). On success the component calls
+         applyEdits(excalidrawApi, ops). No queue needed: the canvas is local.
+  6. UI
+       - Create | Edit tabs in the AI Helper popover. The Edit tab shows how
+         many shapes are selected, has no mode picker, and a prompt box
+         ("E.g. Rename this to Login, make it green").
+
+Things to decide
+  - UI: Create | Edit tabs in the popover (recommended) or a floating
+    "Ask AI" button next to the selected shape.
+  - Scope: send the whole board scene (recommended, allows "all error boxes")
+    or only the selected shape (cheaper, but limited).
+  - Hand-drawn / older shapes have null ids and cannot be edited. Optionally
+    allow targeting by elementId in editOpSchema (also helps MCP). Hand-drawn
+    labels are separate unbound text elements, so this needs extra logic.
+  - Size limit for the scene sent to the model (same cap as get_board_scene).
+  - Docs: mention in-app editing in FLOWFORGE_GUIDE.txt and README features.
+
+Where to change
+  - features/workspace/ai/ (summarizeScene, edit prompt)
+  - lib/boards.ts (use summarizeScene)
+  - lib/ (shared AI model helper)
+  - app/api/ai/generate/route.ts (use the shared helper)
+  - app/api/ai/edit/route.ts (new)
+  - features/workspace/api, hook (editDiagram, useEditDiagram)
+  - features/workspace/_components/workspace-ai-floating-sidebar.tsx (tabs)
+
+Suggested branch : feat/ai-helper-edit
+
+Status : TODO
