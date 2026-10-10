@@ -8,27 +8,27 @@ const MAX_SCENE_ELEMENTS = 300;
 
 // The few fields we read from a saved Excalidraw element (the real element has many more).
 type SavedElement = {
-  id: string;
-  type: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text?: string;
-  containerId?: string | null;
-  backgroundColor?: string;
-  strokeColor?: string;
-  isDeleted?: boolean;
-  startBinding?: { elementId: string } | null;
-  endBinding?: { elementId: string } | null;
-  customData?: { nodeId?: string };
+    id: string;
+    type: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    text?: string;
+    containerId?: string | null;
+    backgroundColor?: string;
+    strokeColor?: string;
+    isDeleted?: boolean;
+    startBinding?: { elementId: string } | null;
+    endBinding?: { elementId: string } | null;
+    customData?: { nodeId?: string; diagramId?: string };
 };
 
 // Reads a board's saved scene and returns a compact version for the AI: no files/images, no deleted
 // elements, and the text inside a shape or arrow merged into that shape as `text`.
 export const getBoardScene = async (boardId: string) => {
     const [row] = await db
-        .select({ elements : whiteboardData.elements })
+        .select({ elements: whiteboardData.elements })
         .from(whiteboardData)
         .where(eq(whiteboardData.projectId, boardId))
         .limit(1);
@@ -45,22 +45,23 @@ export const getBoardScene = async (boardId: string) => {
     });
 
     const elements = live
-    // Those label texts are merged into their shape below, so skip them as separate items.
+        // Those label texts are merged into their shape below, so skip them as separate items.
         .filter((element) => !(element.type === "text" && element.containerId))
         .map((element) => ({
-        id: element.id,
-        nodeId: element.customData?.nodeId ?? null,
-        type: element.type,
-        x: Math.round(element.x),
-        y: Math.round(element.y),
-        width: Math.round(element.width),
-        height: Math.round(element.height),
-        text: element.type === "text" ? element.text : labels.get(element.id),
-        fill: element.backgroundColor,
-        stroke: element.strokeColor,
-        // Only arrows have these: which shapes they connect.
-        from: element.startBinding?.elementId,
-        to: element.endBinding?.elementId,
+            id: element.id,
+            nodeId: element.customData?.nodeId ?? null,
+            diagramId: element.customData?.diagramId ?? null,
+            type: element.type,
+            x: Math.round(element.x),
+            y: Math.round(element.y),
+            width: Math.round(element.width),
+            height: Math.round(element.height),
+            text: element.type === "text" ? element.text : labels.get(element.id),
+            fill: element.backgroundColor,
+            stroke: element.strokeColor,
+            // Only arrows have these: which shapes they connect.
+            from: element.startBinding?.elementId,
+            to: element.endBinding?.elementId,
         }));
 
     return {
@@ -130,28 +131,28 @@ export const queueDiagram = async (boardId: string, item: PendingDiagram) => {
 
 // Sets the board's published flag; returns the updated board, or null if it isn't the user's.
 export const setBoardPublished = async (email: string, boardId: string, isPublished: boolean) => {
-  const [row] = await db
-    .update(projects)
-    .set({ isPublished })
-    .where(and(eq(projects.projectId, boardId), eq(projects.userEmail, email)))
-    .returning();
-  return row ?? null;
+    const [row] = await db
+        .update(projects)
+        .set({ isPublished })
+        .where(and(eq(projects.projectId, boardId), eq(projects.userEmail, email)))
+        .returning();
+    return row ?? null;
 };
 
 // How many MCP diagrams are still waiting to be drawn in the browser (they are not on the public page yet).
 export const countPendingDiagrams = async (boardId: string) => {
-  const [row] = await db
-    .select({ pending: whiteboardData.pendingDiagrams })
-    .from(whiteboardData)
-    .where(eq(whiteboardData.projectId, boardId))
-    .limit(1);
-  return Array.isArray(row?.pending) ? row.pending.length : 0;
+    const [row] = await db
+        .select({ pending: whiteboardData.pendingDiagrams })
+        .from(whiteboardData)
+        .where(eq(whiteboardData.projectId, boardId))
+        .limit(1);
+    return Array.isArray(row?.pending) ? row.pending.length : 0;
 };
 
 // SQL expression for a board's pending queue minus the given ids. Used inside an UPDATE / ON CONFLICT so removal
 // is one atomic statement (a diagram queued meanwhile is never lost, and the Neon HTTP driver has no transactions).
 export const withoutPendingIds = (ids: string[]) => {
-  const idList = sql.join(ids.map((id) => sql`${id}`), sql`, `);
-  return sql`COALESCE((SELECT jsonb_agg(item) FROM jsonb_array_elements(${whiteboardData.pendingDiagrams}) AS item WHERE item->>'id' NOT IN (${idList})), '[]'::jsonb)`;
+    const idList = sql.join(ids.map((id) => sql`${id}`), sql`, `);
+    return sql`COALESCE((SELECT jsonb_agg(item) FROM jsonb_array_elements(${whiteboardData.pendingDiagrams}) AS item WHERE item->>'id' NOT IN (${idList})), '[]'::jsonb)`;
 };
 

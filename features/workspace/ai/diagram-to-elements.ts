@@ -208,8 +208,11 @@ export const diagramToElements = async (rawSpec: DiagramSpec, origin: Origin, mo
   const { spec, routes } =
     mode && usesAutoLayout(mode) ? autoLayout(fitted, mode) : { spec: fitted, routes: {} as Record<number, EdgeRoute> };
   const nodesById = new Map(spec.nodes.map((node) => [node.id, node]));
-  // Every element of one generated diagram shares a group, so a click selects (and exports) the whole diagram.
-  const groupIds = [`diagram-${crypto.randomUUID().slice(0, 8)}`];
+
+  // One id per generated diagram: used as the shared group and stored on every node so edits can find it later.
+  const diagramId = `diagram-${crypto.randomUUID().slice(0, 8)}`;
+  const groupIds = [diagramId];
+
 
   const nodes: ExcalidrawElementSkeleton[] = spec.nodes.map((node) => ({
     type: node.shape,
@@ -223,6 +226,8 @@ export const diagramToElements = async (rawSpec: DiagramSpec, origin: Origin, mo
     strokeStyle: node.strokeStyle ?? "solid",
     fillStyle: "solid",
     groupIds,
+    // Survives id regeneration and autosave; lets MCP tools target "node n3 of this diagram" later.
+    customData: { nodeId: node.id, diagramId },
     // Empty labels (decorative containers) must not create an empty text element.
     ...(node.label
       ? { label: { text: node.label, fontSize: node.fontSize ?? 16, strokeColor: getLabelColor(node.fill) } }
