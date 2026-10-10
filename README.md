@@ -152,7 +152,7 @@ Ask your AI, for example:
 
 > On FlowForge, create a board called "Connection Test" and draw a small flowchart of a login flow.
 
-Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`, `publish_board`, `unpublish_board`. Diagrams are queued on the server and drawn when the board is open in your browser. Boards can't be listed, so give the exact board name.
+Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`, `get_board_scene`, `publish_board`, `unpublish_board`. Diagrams are queued on the server and drawn when the board is open in your browser. Boards can't be listed, so give the exact board name.
 
 ### Server requirements (self-hosting)
 
