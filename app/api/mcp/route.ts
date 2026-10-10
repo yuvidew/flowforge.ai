@@ -12,10 +12,12 @@ import {
   countPendingDiagrams,
   createBoardForUser,
   findBoardsByName,
+  getBoardScene,
   getOwnedBoard,
   queueDiagram,
   setBoardPublished,
 } from "@/lib/boards";
+
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -93,6 +95,29 @@ const handler = createMcpHandler(
         return reply(describeBoard(await createBoardForUser(email, name)));
       },
     );
+
+    server.registerTool(
+      "get_board_scene",
+      {
+        title: "Read what is on a board",
+        description:
+          "Returns the elements currently saved on the board (shapes with their text, arrows with the shapes they connect, positions, colours). Call open_board first for the boardId. Diagrams still queued and not yet drawn in the browser are NOT included.",
+        inputSchema: z.object({ boardId: z.string().min(1).describe("boardId from open_board or create_board") }),
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ boardId }, ctx) => {
+        const email = getEmail(ctx.http?.authInfo);
+        if (!email) return reply("Unauthorized", true);
+
+        const board = await getOwnedBoard(email, boardId);
+        if (!board) return reply("Board not found. Call open_board or create_board first.", true);
+
+        const scene = await getBoardScene(boardId);
+        const note = scene.truncated ? "\n\nThe board is large: only the first elements are shown." : "";
+
+        return reply(`${JSON.stringify(scene)}${note}`);
+      }
+    )
 
     server.registerTool(
       "get_drawing_guide",

@@ -1,0 +1,59 @@
+==============================================================================
+FLOWFORGE AI - PROJECT ISSUES / FUTURE IDEAS
+==============================================================================
+
+Open items to build later. Add new ones at the bottom using the same format.
+
+
+------------------------------------------------------------------------------
+ISSUE 1: Let the AI read the board back and edit a single shape
+------------------------------------------------------------------------------
+Source   : Comment on the X.com launch post.
+Question : "Does it hand back the Excalidraw JSON or a rendered image? Getting
+            the raw scene back is what made this useful for me, since the agent
+            can tweak one box later instead of regenerating the whole thing and
+            shuffling the layout."
+
+Current behaviour
+  - The AI tool sends a compact diagram spec (nodes + edges) via draw_diagram.
+  - The server queues it in whiteboardData.pendingDiagrams.
+  - The open browser tab converts it to Excalidraw elements (dagre layout) and
+    draws it.
+  - Nothing is ever returned to the AI: no scene JSON, no image.
+  - There is no tool to read a board or to change one shape. Every
+    draw_diagram call adds a NEW diagram to the right of existing content.
+
+Problem
+  To change one box the AI must draw the whole diagram again, which duplicates
+  it and can change the layout.
+
+Proposed work
+  1. New MCP tool get_board_scene({ boardId })
+       - Returns the saved Excalidraw elements (and optionally the original
+         diagram spec) for a board the user owns.
+       - Strip heavy fields (images/files) and cap the size of the response.
+  2. New MCP tool update_diagram / edit_element
+       - Edit by element id or by node id: change text, colour, size, delete
+         a node or edge, add a node or edge.
+       - Goes through the same pending queue so the open tab applies it, or
+         edits the stored scene directly when the board is closed.
+  3. Keep node ids stable
+       - Store the original diagram spec (with node ids) next to the elements
+         so later edits can target "node X" without moving the rest.
+       - Re-run dagre only when asked, otherwise keep existing positions.
+  4. Optional: export_board_image tool that returns a rendered PNG/SVG.
+
+Things to decide
+  - Return only the scene JSON, or also an image preview?
+  - Edit while the tab is closed (server-side) or only through the queue?
+  - Size limits for the returned scene.
+  - Docs: update FLOWFORGE_GUIDE.txt section 6.3 (tools) and section 16
+    (limits: "no board read / edit over MCP") when this ships.
+
+Where to change
+  - app/api/mcp/route.ts (new tools)
+  - lib/ board queries (read scene by board id, scoped to the user's email)
+  - db/schema.ts only if the diagram spec needs to be stored
+  - features/workspace pending hooks (apply edit operations in the browser)
+
+Status : Part 1 done (get_board_scene), edit tool pending

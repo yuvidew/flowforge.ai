@@ -44,7 +44,7 @@ Then sign in:
 2. Type `/mcp`, choose `flowforge`, choose **Authenticate**.
 3. The browser opens. Sign in to FlowForge and approve. Return to the terminal.
 
-Verify: `claude mcp list` shows `flowforge` as connected, and `/mcp` lists six tools (`open_board`, `create_board`, `get_drawing_guide`, `draw_diagram`, `publish_board`, `unpublish_board`).
+Verify: `claude mcp list` shows `flowforge` as connected, and `/mcp` lists seven tools (`open_board`, `create_board`, `get_drawing_guide`, `draw_diagram`, `get_board_scene`, `publish_board`, `unpublish_board`).
 
 Switch or remove:
 

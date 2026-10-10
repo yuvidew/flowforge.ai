@@ -44,6 +44,7 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 | `create_board` | Create a new board; fails if that name already exists (then use `open_board`) |
 | `get_drawing_guide` | Get the design rules for one mode. Call before `draw_diagram` |
 | `draw_diagram` | Queue a diagram for the board |
+| `get_board_scene` | Read the elements saved on the board (shapes, text, arrow connections, positions). Queued diagrams are not included until the board is opened in the browser |
 | `publish_board` | Make the board public (read-only link). Idempotent, same link every time |
 | `unpublish_board` | Take the public link down. Content is kept |
 

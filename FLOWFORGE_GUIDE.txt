@@ -1,0 +1,773 @@
+==============================================================================
+FLOWFORGE AI - COMPLETE PROJECT GUIDE
+==============================================================================
+
+What this document is
+---------------------
+A single plain-text guide to FlowForge: what it is, how it works inside, how to
+use it day to day, how to connect AI tools through MCP, how to solve real-world
+problems with it, and how to fix things when they break.
+
+Contents
+  1.  What FlowForge is
+  2.  Core ideas in one minute
+  3.  Using the app (end user)
+  4.  The five diagram modes
+  5.  Writing good prompts
+  6.  Connecting an AI tool through MCP
+  7.  Working with MCP day to day
+  8.  Real-world problems and how to solve them
+  9.  How it works inside (architecture)
+ 10.  Data model
+ 11.  API routes
+ 12.  Running the project locally (developer)
+ 13.  Deploying and self-hosting
+ 14.  Code conventions
+ 15.  Troubleshooting
+ 16.  Limits and things to know
+ 17.  Quick reference
+
+
+==============================================================================
+1. WHAT FLOWFORGE IS
+==============================================================================
+
+FlowForge is an AI whiteboard. You describe an idea in plain words and it draws
+a clean, editable diagram on an Excalidraw canvas: flowcharts, architecture
+diagrams, concept maps, org charts, timelines, web page wireframes and mobile
+app screens.
+
+Two ways to get a diagram onto a board:
+
+  A) Inside the app - type a description in the AI sidebar of a board and pick a
+     mode. FlowForge asks a Mistral model for the diagram and draws it.
+
+  B) From your own AI tool through MCP - Claude Code, Cursor, VS Code, OpenCode,
+     claude.ai, Claude Desktop or ChatGPT. Your AI designs the diagram itself
+     and sends it to your FlowForge board. No second AI model is involved on
+     the server in this path.
+
+Every diagram is a normal Excalidraw drawing afterwards. You can move, restyle,
+delete and add shapes by hand. Boards autosave.
+
+Other features
+  - Boards: create, rename, archive, restore, delete. Each gets a cover image.
+  - Publishing: share a board as a read-only public link, unpublish any time.
+  - Sign-in with Clerk. Each user only ever sees their own boards.
+
+
+==============================================================================
+2. CORE IDEAS IN ONE MINUTE
+==============================================================================
+
+Board        One whiteboard. Has a name, an owner (by email), a cover, and flags
+             isArchived and isPublished.
+
+Diagram      A small JSON description: a title, nodes (shapes with text, size,
+             colour), edges (arrows between nodes) and optional free text.
+             It is NOT pixels. FlowForge converts it to Excalidraw elements.
+
+Mode         The kind of diagram: diagram, flowchart, architecture, web,
+             mobile. The mode controls the design rules and the layout.
+
+Auto layout  For diagram / flowchart / architecture modes the AI does not choose
+             positions. Software (dagre) positions the nodes and routes arrows
+             so nothing overlaps. For web / mobile modes the AI chooses pixel
+             coordinates because wireframes are spatial.
+
+MCP queue    When an external AI sends a diagram, the server does not draw it.
+             It stores it in a queue on the board. The open browser tab picks
+             it up, draws it, saves, and the queue entry is removed.
+
+Consequence: a diagram sent over MCP appears only while the board is open in a
+browser signed in to the same account. This is the number-one "why is nothing
+showing?" cause (see section 15).
+
+
+==============================================================================
+3. USING THE APP (END USER)
+==============================================================================
+
+3.1 Sign in
+  Open the site and sign up / sign in (Clerk).
+
+3.2 Dashboard
+  - "All Files": your active boards, searchable and paginated.
+  - "Archived": boards you archived. Restore or delete them for good.
+  - "New board" button in the sidebar creates a board and opens it.
+  - Board card menu: rename, archive, delete.
+
+3.3 The workspace (the board editor)
+  - Big Excalidraw canvas with a custom toolbar and a floating options bar.
+  - Board name is editable at the top and autosaves.
+  - Light / dark / system theme (Settings in the user menu).
+  - AI sidebar: choose a mode, describe the diagram, generate.
+  - Publish dialog: turn the public link on or off.
+
+3.4 Publish a board
+  Publishing makes the board readable by ANYONE with the link
+  (/view/<boardId>). The public page is read-only. Unpublish removes access
+  but keeps the content. Only publish what you are happy to share.
+
+3.5 Connect to MCP (in the app)
+  User menu (bottom-left of the sidebar) -> "Connect to MCP". A dialog shows the
+  server URL with a copy button and one tab per tool (Claude Code, Cursor,
+  VS Code, OpenCode, Custom connector, Skills). Commands already contain the
+  correct URL for the site you are on.
+
+
+==============================================================================
+4. THE FIVE DIAGRAM MODES
+==============================================================================
+
+Mode          Use it for                                     Layout
+------------  ---------------------------------------------  ----------------
+diagram       Mind / concept maps, timelines, org charts,    Automatic
+              entity relationships, comparisons
+flowchart     Processes, workflows, decision logic, user     Automatic
+              journeys. 10-20 nodes, one Start, one or more
+              Ends, every decision has labelled branches
+architecture  Software / cloud system design (clients,       Automatic,
+              gateways, services, queues, databases)         left to right
+web           Desktop web page wireframe                     AI sets pixels
+mobile        Phone app screens, max 4 screens, with         AI sets pixels
+              navigation arrows between them
+
+Flowchart colour meaning (consistent on purpose)
+  Green ellipse   Start (and success end)
+  Red ellipse     Failure end
+  Blue rectangle  Process step ("Send 6-digit code via SMS")
+  Amber diamond   Decision, always a question ending in "?"
+  Violet box      External system or hand-off (payment provider, email service)
+  Grey box        Wait state or note
+
+Limits per diagram: up to 80 nodes, 150 edges, 20 free-floating texts.
+
+
+==============================================================================
+5. WRITING GOOD PROMPTS
+==============================================================================
+
+The quality of a diagram follows the quality of the description. A good prompt
+names real things and states the numbers that matter.
+
+Rules of thumb
+  1. Say what the diagram is for and who reads it.
+  2. Name real steps, fields, buttons and technologies.
+  3. State limits and counts: "3 attempts", "4 screens", "3 feature cards".
+     Counts you give are treated as binding.
+  4. Mention failure cases: invalid input, timeout, declined payment, retry.
+  5. Pick the right mode first (section 4).
+  6. For big systems, draw several smaller diagrams instead of one huge one.
+
+Weak:   "Make a login flow."
+Strong: "Login flow for a web app: email + password, 5 failed attempts locks the
+         account for 15 minutes, optional SMS 2FA, 'Forgot password' sends a
+         reset email."
+
+Weak:   "Architecture of my app."
+Strong: "Architecture for an e-commerce site: Next.js frontend, API gateway,
+         Orders, Payments (Stripe) and Inventory services, PostgreSQL per
+         service, Kafka between services, Redis cache."
+
+Weak:   "Mobile app."
+Strong: "3-screen food delivery app: restaurant list with search and filters,
+         restaurant menu with an 'Add to cart' button, checkout with address
+         and a 'Place order' button."
+
+If a result is not right, do not start over. Say what to change ("add a retry
+loop after the payment step", "split Payments into its own service").
+
+
+==============================================================================
+6. CONNECTING AN AI TOOL THROUGH MCP
+==============================================================================
+
+6.1 What MCP is here
+  MCP (Model Context Protocol) is a standard way for an AI tool to call tools
+  on a server. FlowForge runs an MCP server so your AI tool can create boards,
+  draw diagrams, and publish boards on your account.
+
+6.2 The server
+  URL        https://<your-domain>/api/mcp
+             (local development: http://localhost:3000/api/mcp)
+  Transport  Remote, "streamable HTTP"
+  Sign-in    OAuth through Clerk, same account as the website
+  API keys   None. No headers to set.
+
+  On first use the tool opens a browser window. You sign in to FlowForge and
+  approve access. The tool stores a short-lived token and refreshes it by
+  itself.
+
+6.3 Tools the server provides
+  open_board         Find an existing board by exact name (case-insensitive,
+                     archived boards are skipped). Returns boardId + links.
+  create_board       Make a new board. Fails if the name already exists.
+  get_drawing_guide  Returns the current design rules for one mode. The AI
+                     calls this before drawing.
+  draw_diagram       Queue a diagram on a board. Input: boardId, mode, diagram.
+  get_board_scene    Read back the elements saved on a board (shapes with text,
+                     arrows with the shapes they connect, positions, colours).
+                     Input: boardId. Diagrams still queued are not included.
+  publish_board      Make the board public (read-only link). Idempotent.
+  unpublish_board    Take the public link down. Content is kept.
+
+  There is deliberately no "list boards" tool and no "delete" tool.
+
+6.4 Claude Code
+  Add the server (any terminal):
+
+      claude mcp add --transport http flowforge https://<your-domain>/api/mcp
+
+  Scope (where it is available):
+      local    (default) only this project folder, private to you
+      user     every project         -> add:  --scope user
+      project  written to .mcp.json so the team gets it (contains no secret)
+
+  Sign in:
+      1. Start a NEW Claude Code session.
+      2. Type /mcp, choose flowforge, choose Authenticate.
+      3. Approve in the browser.
+  Verify:  claude mcp list   -> flowforge connected
+  Remove:  claude mcp remove flowforge
+
+6.5 Cursor
+  File ~/.cursor/mcp.json (all projects) or .cursor/mcp.json (one project):
+
+      {
+        "mcpServers": {
+          "flowforge": { "url": "https://<your-domain>/api/mcp" }
+        }
+      }
+
+  Then Cursor Settings -> MCP -> flowforge -> connect / login.
+
+6.6 VS Code (GitHub Copilot agent mode)
+  File .vscode/mcp.json:
+
+      {
+        "servers": {
+          "flowforge": { "type": "http", "url": "https://<your-domain>/api/mcp" }
+        }
+      }
+
+  VS Code asks you to authenticate on first use.
+
+6.7 OpenCode
+  File opencode.json (project) or the global config:
+
+      {
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": {
+          "servers": {
+            "flowforge": { "type": "remote", "url": "https://<your-domain>/api/mcp" }
+          }
+        }
+      }
+
+  Do not add headers. Sign in with:  opencode mcp auth flowforge
+  (older OpenCode versions put servers directly under "mcp"; if the config is
+  rejected check your version's docs - fields "type" and "url" stay the same).
+
+6.8 claude.ai, Claude Desktop, ChatGPT (custom connector)
+  Settings -> Connectors -> Add custom connector.
+    Name:  FlowForge
+    URL:   https://<your-domain>/api/mcp
+    Auth:  OAuth (if asked)
+  Click Connect, sign in, approve.
+  ChatGPT: turn on Developer mode first; then enable the connector in a chat.
+  IMPORTANT: these run on the internet, so they cannot reach localhost. Use the
+  public HTTPS URL.
+
+6.9 Any other client
+  Look for "remote MCP server", "streamable HTTP" or "custom connector". Enter
+  the URL, choose OAuth, set no Authorization header. If the client only
+  supports local (stdio) servers, bridge it:
+
+      npx -y mcp-remote https://<your-domain>/api/mcp
+
+6.10 Skills (optional, helps AI tools that support them)
+  A "skill" is a small instruction file that teaches the AI how to do a task.
+  The in-app dialog (tab "Skills") has the full "flowforge-connect" skill ready
+  to copy. Save it as SKILL.md in a folder named flowforge-connect inside
+  ~/.claude/skills/ (all projects) or .claude/skills/ (one project). Then just
+  ask: "connect to FlowForge" and the AI follows the steps for your client.
+
+6.11 Test that it works
+  Give your AI this prompt:
+
+      On FlowForge, create a board called "Connection Test" and draw a small
+      flowchart of a login flow.
+
+  Expected: the AI calls create_board, get_drawing_guide, draw_diagram, then
+  gives you a workspace link. Open it (signed in, same account). The diagram
+  appears within a few seconds.
+
+
+==============================================================================
+7. WORKING WITH MCP DAY TO DAY
+==============================================================================
+
+The golden workflow (what a well-behaved AI does)
+  1. Get the board:
+       existing -> open_board({ name })
+       new      -> create_board({ name })
+     Both return boardId, workspaceUrl, published, publicUrl.
+  2. Choose the mode and call get_drawing_guide({ mode }).
+  3. Design the diagram from your words: real labels, real field names.
+  4. draw_diagram({ boardId, mode, diagram }).
+  5. Tell you the workspace link. Diagram shows up while the board is open.
+  6. Publish only if you ask.
+
+Rules that protect you
+  - The AI must never guess or invent board names or ids. It works only with a
+    board you name, or a new one.
+  - It must not publish, unpublish or create boards you did not ask for.
+  - draw_diagram answers "Queued" - that means NOT drawn yet. A good AI says so
+    and does not claim the diagram is visible.
+  - It must not re-send the same diagram "to be sure". Several diagrams on one
+    board: one draw_diagram call each; each new diagram is placed to the right
+    of the existing content.
+
+Two links, do not mix them up
+  workspaceUrl   Private. Needs sign-in. This is where you edit.
+  publicUrl      Read-only. Exists only when published is true. Share this one
+                 with other people - and only after publishing.
+
+Useful phrases for your AI
+  "Open the board 'Sprint Planning' on FlowForge and add an architecture
+   diagram of ..."
+  "Create a FlowForge board called 'Checkout redesign' with a flowchart of the
+   payment flow, then a mobile mockup of the 3 screens."
+  "Publish the 'Checkout redesign' board and give me the public link."
+  "Unpublish 'Checkout redesign'."
+
+
+==============================================================================
+8. REAL-WORLD PROBLEMS AND HOW TO SOLVE THEM
+==============================================================================
+
+Pattern for every problem below:
+   Describe the situation -> pick the mode -> give details and limits ->
+   refine in follow-up messages -> edit by hand -> share.
+
+8.1 "I need to explain a process to my team"
+  Mode: flowchart. Example prompt:
+    "Flowchart of our refund process: customer submits request, support checks
+     order age (over 30 days is rejected), manager approval above 200 USD,
+     payment provider refund, email confirmation, 3 retries if the provider
+     times out."
+  Result: Start, steps, decisions with Yes / No labels, a failure end and a
+  retry loop. Publish and send the link, or screenshot from the board.
+
+8.2 "I need to document how our system fits together"
+  Mode: architecture. Example:
+    "Architecture of our booking app: React Native app, API gateway, Auth
+     service (Clerk), Booking service, Notification service, PostgreSQL,
+     Redis, SQS between Booking and Notification."
+  Tip: draw one diagram per concern (overall system, then 'payment flow',
+  then 'deployment') rather than one giant diagram. Each new diagram lands to
+  the right of the previous one.
+
+8.3 "I'm planning an app and need screens before design starts"
+  Modes: mobile (up to 4 screens, arrows show navigation) and web (desktop
+  page). Example:
+    "Mobile: onboarding (3 swipe cards), sign up (email, password, 'Create
+     account'), home feed (search, 5 cards), profile (avatar, settings)."
+  Use the result as a conversation starter with designers, not a final design.
+
+8.4 "I need to brainstorm / organise ideas"
+  Mode: diagram. Example:
+    "Mind map for a product launch: product, marketing, funding, hiring, legal,
+     with 2 sub-points each."
+  Also good for org charts, timelines, entity relationships, pros/cons.
+
+8.5 "I want my AI coding tool to diagram the code it just wrote"
+  With MCP connected, tell Claude Code / Cursor:
+    "Read the auth module and draw its login flow as a flowchart on my
+     FlowForge board 'Auth docs'."
+  The AI reads your code, then designs the diagram from what it found. This
+  keeps docs and code honest. Re-run after refactors and compare.
+
+8.6 "I'm onboarding a new developer"
+  Create a board 'Onboarding' and ask the AI for: system architecture, request
+  lifecycle flowchart, database entity relationships (diagram mode), and the
+  deploy pipeline. Publish the board and give the link.
+
+8.7 "I need a quick incident / post-mortem picture"
+  Mode: diagram (timeline) or flowchart:
+    "Timeline: 14:02 deploy, 14:10 error rate up, 14:15 alert, 14:20 rollback,
+     14:25 recovery."
+
+8.8 "I need to review business logic with non-technical people"
+  Write the prompt in business terms ("customer", "approval", "invoice").
+  Flowchart output uses plain labels and colour meaning, so stakeholders can
+  verify rules like "orders over 500 need manager approval" at a glance. Fix
+  by saying what is wrong; ask for a revised diagram.
+
+8.9 "The diagram is too big / unreadable"
+  Split it. Ask for "level 1: only main services" then "level 2: inside the
+  Payments service". Keep each below roughly 20 nodes for a flowchart.
+
+8.10 "I want to keep several versions"
+  Every draw_diagram adds a diagram to the right. Keep old attempts on the
+  board for comparison, or create a new board per version
+  ('Checkout v1', 'Checkout v2').
+
+
+==============================================================================
+9. HOW IT WORKS INSIDE (ARCHITECTURE)
+==============================================================================
+
+9.1 Stack
+  Next.js 16 (App Router), React 19, TypeScript
+  Tailwind CSS 4, shadcn/ui (on Base UI), lucide-react, next-themes
+  Excalidraw (@excalidraw/excalidraw) for the canvas
+  dagre (@dagrejs/dagre) for automatic layout
+  TanStack Query v5 + axios for all client API calls
+  Clerk for auth; webhook keeps a users table in sync
+  Neon serverless Postgres with Drizzle ORM
+  Vercel AI SDK + Mistral models for in-app generation
+  Inngest for background jobs (currently the sample function only)
+  mcp-handler + @clerk/mcp-tools for the MCP server
+
+9.2 Client layering (always the same)
+  app/**/page.tsx                       thin page
+    -> features/<f>/_components/*       UI, consumes hooks only
+      -> features/<f>/hook/use-*.ts     TanStack hooks (queries, mutations,
+                                        toasts)
+        -> features/<f>/api/index.ts    axios functions only
+          -> app/api/<res>/route.ts     route handler (Clerk auth, Drizzle)
+
+  Components never call axios and never show toasts - hooks do.
+
+9.3 Flow A - generating inside the app
+  1. User types a description and picks a mode in the AI sidebar.
+  2. Client POSTs to /api/ai/generate { mode, prompt }.
+  3. Server checks sign-in, validates the body (zod).
+  4. Server calls Mistral with the mode's system prompt and a diagram schema,
+     trying models in order (ministral-14b, then ministral-8b). A model that is
+     rate limited (429), overloaded (503), too slow (55 s limit) or not
+     available on the plan (403/404) falls through to the next.
+  5. Output is validated against the diagram schema and returned as JSON.
+  6. Client turns the spec into Excalidraw elements: auto layout for
+     diagram/flowchart/architecture, given coordinates for web/mobile.
+  7. Elements are inserted into an empty spot of the canvas. Autosave stores
+     the scene.
+
+9.4 Flow B - drawing through MCP
+  1. AI tool calls draw_diagram on /api/mcp with a Bearer token.
+  2. Server verifies the Clerk token, finds the user's email, checks that the
+     board belongs to that user.
+  3. The diagram is validated (strict input schema, then the main diagram
+     schema; every edge must point at an existing node id).
+  4. Server appends it to the board's pendingDiagrams list in ONE SQL
+     statement (so concurrent calls never overwrite each other) and answers
+     "Queued".
+  5. The open workspace polls GET /api/whiteboard/pending, converts each
+     pending diagram to elements, places it to the right of existing content,
+     and inserts it.
+  6. The next autosave includes ackPendingIds so the server removes those ids
+     from the queue in the same statement as saving the scene. A diagram
+     leaves the queue only after the scene containing it is saved.
+  7. A diagram that cannot be drawn is acknowledged straight away so it is not
+     retried forever.
+
+9.5 Authentication
+  - Website: Clerk middleware (proxy.ts). If Clerk keys are missing, auth is
+    skipped so local development still runs.
+  - MCP: OAuth via Clerk. The server publishes OAuth metadata under
+    /.well-known so clients can discover the login server, register
+    themselves (dynamic client registration with PKCE) and get a token.
+  - Every query is scoped to the signed-in user's email.
+
+9.6 Why the MCP design is like this
+  - The connected AI designs the diagram (it is already an LLM). The server
+    only validates and queues - cheaper, no second model, no extra key.
+  - Queue + browser draw: Excalidraw elements are generated in the browser,
+    so the server never needs a canvas.
+
+
+==============================================================================
+10. DATA MODEL (Postgres via Drizzle, db/schema.ts)
+==============================================================================
+
+users
+  id (serial pk), clerkId (unique), name, email (unique, required),
+  credits (default 3), created_at
+
+projects  (a "board")
+  id, projectId (uuid string, unique), projectName, userEmail,
+  coverImage (file in public/cover), isArchived (default false),
+  isPublished (default false), created_at
+
+whiteboardData
+  id, projectId (unique, references projects.projectId),
+  elements (jsonb), appState (jsonb), files (jsonb),
+  pendingDiagrams (jsonb)  <- MCP queue,
+  updated_at
+
+Apply changes:  npm run db:push   (dev)   or  db:generate + migrations.
+Forgetting db:push after pulling a change that adds a column (for example
+pendingDiagrams) is a classic cause of 500 errors on MCP calls.
+
+
+==============================================================================
+11. API ROUTES (app/api)
+==============================================================================
+
+  /api/projects, /api/projects/[projectId]   Board CRUD for the signed-in user
+  /api/whiteboard                            Load / save a board's scene
+  /api/whiteboard/pending                    GET queued MCP diagrams,
+                                             POST acknowledge ids
+  /api/public/whiteboard                     Read-only scene of a published board
+  /api/ai, /api/ai/generate                  In-app diagram generation (Mistral)
+  /api/mcp                                   MCP server (OAuth required)
+  /api/users                                 User helper
+  /api/webhooks/clerk                        Clerk user.created/updated/deleted
+                                             -> users table
+  /api/inngest, /api/inngest/trigger         Inngest endpoint and trigger
+  /.well-known/oauth-authorization-server    OAuth metadata for MCP clients
+  /.well-known/oauth-protected-resource/api/mcp
+                                             OAuth resource metadata (folder
+                                             name must be exactly
+                                             oauth-protected-resource)
+
+Response conventions: success returns the data (or a small envelope), failure
+returns { "error": "message" }. 401 not signed in, 400 bad input, 404 not
+found, 500 unexpected.
+
+Pages
+  /sign-in, /sign-up          Clerk
+  /all-files, /archived       Dashboard (with sidebar)
+  /workspace/[id]             Board editor
+  /view/[id]                  Public read-only board
+
+
+==============================================================================
+12. RUNNING THE PROJECT LOCALLY (DEVELOPER)
+==============================================================================
+
+12.1 Install
+    bun install        (or npm install)
+
+12.2 Environment (.env in the project root)
+    NEXT_PUBLIC_APP_URL                 http://localhost:3000
+    DATABASE_URL                        Neon Postgres connection string
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY   Clerk
+    CLERK_SECRET_KEY                    Clerk
+    NEXT_PUBLIC_CLERK_SIGN_IN_URL       e.g. /sign-in
+    NEXT_PUBLIC_CLERK_SIGN_UP_URL       e.g. /sign-up
+    CLERK_WEBHOOK_SIGNING_SECRET        verifies the Clerk webhook
+    MISTRAL_AI (or MISTRAL_API_KEY)     in-app diagram generation
+    INNGEST_EVENT_KEY, INNGEST_SIGNING_KEY   background jobs
+
+  Never commit real keys.
+
+12.3 Database
+    npm run db:push        apply schema
+    npm run db:studio      browse data
+
+12.4 Start
+    npm run dev            http://localhost:3000
+    npm run inngest:dev    optional: local Inngest dev server
+
+12.5 Scripts
+    dev, build, start          Next.js
+    db:generate, db:push, db:studio   Drizzle
+    inngest:dev                Inngest dev server
+
+12.6 Folder map
+    app/            routes, layouts, API handlers, .well-known
+    components/     shared UI; components/ui = generated shadcn (do not edit)
+    features/       one folder per feature
+        all-files/      board list and actions
+        workspace/      editor, ai/ pipeline (prompts, schema, auto-layout,
+                        diagram-to-elements, scene), publishing, pending hooks
+        connect-mcp/    content of the "Connect to MCP" dialog
+    db/             Drizzle schema + client
+    lib/            auth helpers, axios instance, board queries, Inngest
+    public/cover    board cover images
+    drizzle/        generated SQL migrations
+    test-queries.json  ready-made request bodies for /api/ai/generate
+                       (including invalid ones that should return 400)
+
+12.7 Testing the generator quickly
+  Sign in in the browser, then POST bodies from test-queries.json to
+  /api/ai/generate (for example mode "flowchart", prompt "Customer onboarding
+  flow with signup, email verification and a subscription decision").
+
+
+==============================================================================
+13. DEPLOYING AND SELF-HOSTING
+==============================================================================
+
+The OAuth login for MCP works only when ALL of these are true:
+
+  1. The app is deployed on HTTPS and NEXT_PUBLIC_APP_URL is the real URL.
+  2. Dynamic client registration (with PKCE) is enabled in the Clerk dashboard
+     (OAuth applications). Use the production Clerk instance for real users;
+     an issuer ending in .clerk.accounts.dev means development keys are still
+     in use.
+  3. These routes are deployed:
+        app/api/mcp/route.ts
+        app/.well-known/oauth-authorization-server/route.ts
+        app/.well-known/oauth-protected-resource/api/mcp/route.ts
+  4. The database has the latest schema (npm run db:push).
+  5. The Clerk webhook points to /api/webhooks/clerk with its signing secret.
+  6. Mistral key set (in-app generation). Long model calls are allowed up to
+     120 s on hosts that cap function time (maxDuration).
+
+Quick health checks (replace host):
+
+   # 1. no token -> must answer 401 and point to the metadata
+   curl -i -X POST https://<host>/api/mcp -H "content-type: application/json" -d "{}"
+
+   # 2. both documents must answer 200 with JSON
+   curl -i https://<host>/.well-known/oauth-protected-resource/api/mcp
+   curl -i https://<host>/.well-known/oauth-authorization-server
+
+
+==============================================================================
+14. CODE CONVENTIONS (from CLAUDE.md)
+==============================================================================
+
+  - Components, hooks, helpers, route handlers: const + arrow functions,
+    exported directly. Default-exported pages: named const, then
+    "export default". Exception: components/ui is generated shadcn code - never
+    convert or hand-edit it.
+  - Comments: each component gets a JSDoc block (@component, @description,
+    @param). Hooks, functions and non-obvious variables get one "//" line above
+    explaining why/what, not restating the code.
+  - API calls: TanStack Query + the shared axios instance in lib/axios.ts
+    (baseURL "/api"). Use getErrorMessage() from lib/get-error-message.ts.
+    Query keys are kebab-case arrays. Every mutation has mutationFn,
+    mutationKey, onSuccess (invalidate + success toast) and onError (error
+    toast). No optimistic updates unless requested.
+  - Render states in order: isPending -> isError -> empty -> data.
+  - Route handlers: Clerk auth first, scope every query to the user, validate
+    bodies with zod, never spread client objects into db.update().set(),
+    wrap in try/catch, always return { error } on failure.
+  - This is a recent Next.js version with breaking changes. Check
+    node_modules/next/dist/docs/ before writing Next.js-specific code.
+
+
+==============================================================================
+15. TROUBLESHOOTING
+==============================================================================
+
+MCP and connection
+  Symptom                              Cause / fix
+  -----------------------------------  ------------------------------------------
+  "needs authentication" or 401        Normal before sign-in. Authenticate
+                                       (/mcp in Claude Code, opencode mcp auth
+                                       flowforge, or the connect button).
+  Server or tools missing              Start a NEW session after adding it.
+                                       Claude Code: claude mcp list.
+  Client says dynamic client           The owner must enable Dynamic client
+  registration is not supported        registration (PKCE) in the Clerk dashboard.
+  Login works, still "unauthorized"    Authenticate again. URL must end with
+                                       /api/mcp, no extra path.
+  Works locally, not in ChatGPT or     They cannot reach localhost. Use the public
+  claude.ai                            HTTPS URL.
+  Signed in as the wrong account       Boards belong to the account used at
+                                       sign-in. Remove and re-add the server, or
+                                       sign out of FlowForge in the browser first.
+  Token expired                        Authenticate again; clients normally
+                                       refresh by themselves.
+
+Boards and drawing
+  "No board named X"                   Boards cannot be listed. Give the exact
+                                       name, or ask the AI to create it.
+  "More than one board is named X"     Rename one of them or use a more specific
+                                       name.
+  "A board named X already exists"     Use open_board instead of create_board.
+  "Board not found"                    The boardId is wrong or not yours. Call
+                                       open_board / create_board again.
+  "Queued" but nothing appears         Open the workspace link in a browser,
+                                       signed in to the SAME account, and keep
+                                       the tab open a few seconds.
+  "These edges point at ids that are   The diagram referenced a node id that
+  not in nodes"                        does not exist. The AI must fix the listed
+                                       edges and call draw_diagram once more.
+  "The diagram is not valid"           A field has the wrong type. Check against
+                                       the tool schema and retry.
+  Public link shows nothing new        Queued diagrams are not drawn until the
+                                       workspace is opened once. Open it first.
+  Diagram overlaps / ugly layout       Only web/mobile use AI coordinates. For
+                                       other modes layout is automatic - the
+                                       cause is usually labels too long for the
+                                       node size; ask for shorter labels or
+                                       line breaks.
+
+In-app generation
+  "AI is busy right now" (503)         Model rate-limited or slow. Wait a moment
+                                       and retry. Fallback models are tried
+                                       automatically.
+  "The AI returned an invalid          Model output failed validation. Retry, or
+  diagram" (502)                       simplify the description.
+  Empty or very sparse result          Add detail: real step names, counts,
+                                       failure cases.
+
+Developer
+  500 on MCP / whiteboard routes       Database schema out of date - run
+                                       npm run db:push.
+  Clerk errors in local dev            Missing keys: auth is skipped, but
+                                       features needing a user will not work.
+                                       Add real Clerk keys.
+  OAuth discovery 404                  Check the folder name
+                                       oauth-protected-resource and redeploy.
+
+
+==============================================================================
+16. LIMITS AND THINGS TO KNOW
+==============================================================================
+
+  - 80 nodes, 150 edges, 20 texts per diagram. Title max 60 characters.
+  - Mobile mode: max 4 screens.
+  - Board name for MCP lookups: up to 50 characters, exact match
+    (case-insensitive).
+  - One diagram per draw_diagram call; up to 50 ids acknowledged per save.
+  - Publishing exposes the board to anyone with the link.
+  - No board listing and no delete over MCP - by design.
+  - MCP diagrams need an open browser tab to be drawn.
+  - get_board_scene returns only what is already saved; diagrams still queued
+    appear after the board has been opened in the browser.
+  - No edit tool over MCP yet: changing one shape means drawing a new diagram.
+  - In-app generation depends on Mistral free-tier rate limits.
+  - Credits column exists on users (default 3) but is not enforced by the
+    documented flows.
+
+
+==============================================================================
+17. QUICK REFERENCE
+==============================================================================
+
+Connect Claude Code
+    claude mcp add --transport http flowforge https://<your-domain>/api/mcp
+    (new session) -> /mcp -> flowforge -> Authenticate
+
+First test prompt
+    On FlowForge, create a board called "Connection Test" and draw a small
+    flowchart of a login flow.
+
+Mode picker
+    process / decisions        -> flowchart
+    system design              -> architecture
+    ideas, org chart, timeline -> diagram
+    desktop page layout        -> web
+    phone screens              -> mobile
+
+Remember
+    1. "Queued" is not "drawn". Open the workspace link.
+    2. Same account in the browser and in the MCP sign-in.
+    3. Give exact board names - boards cannot be listed.
+    4. Publish only on purpose.
+    5. Specific prompts (real names, numbers, failure cases) = good diagrams.
+
+Dev commands
+    npm run dev | npm run db:push | npm run db:studio | npm run inngest:dev
+
+==============================================================================
+END OF DOCUMENT
+==============================================================================
