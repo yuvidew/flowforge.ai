@@ -13,6 +13,7 @@
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^4.0.59",
     "@ai-sdk/mistral": "^4.0.57",
     "@base-ui/react": "^1.7.0",
     "@clerk/mcp-tools": "^0.6.0",
