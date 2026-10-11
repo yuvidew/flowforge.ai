@@ -202,12 +202,10 @@ const buildBackdrop = (
   ];
 };
 
-// Converts a validated diagram spec into Excalidraw elements positioned from `origin`.
+// Pure part of the conversion (sizing + layout + spec -> Excalidraw skeleton), positioned from `origin`.
 // Graph-style modes (diagram, flowchart, architecture) are laid out automatically; mockups keep the model's coordinates.
-// Excalidraw regenerates element ids (keeping arrow bindings intact), so repeated generations never collide.
-// Async because the Excalidraw bundle is browser-only and must be imported lazily (never during SSR).
-export const diagramToElements = async (rawSpec: DiagramSpec, origin: Origin, mode?: AiModeId) => {
-  const { convertToExcalidrawElements } = await import("@excalidraw/excalidraw");
+// Needs no canvas, so the MCP server can use it too.
+export const buildDiagramSkeleton = (rawSpec: DiagramSpec, origin: Origin, mode?: AiModeId): ExcalidrawElementSkeleton[] => {
   // Size nodes to their labels first so both the layout and the drawn shapes use the final dimensions.
   const sized = rawSpec.nodes.map(fitNodeToLabel);
   const fitted = { ...rawSpec, nodes: mode === "mobile" ? spaceScreens(sized) : sized };
@@ -288,5 +286,13 @@ export const diagramToElements = async (rawSpec: DiagramSpec, origin: Origin, mo
   }));
 
   // Backdrop first, then nodes (containers sit behind what follows); arrows and texts draw on top.
-  return convertToExcalidrawElements([...buildBackdrop(spec, routes, origin, groupIds), ...nodes, ...edges, ...texts]);
+  return [...buildBackdrop(spec, routes, origin, groupIds), ...nodes, ...edges, ...texts];
+};
+
+// Converts a validated diagram spec into Excalidraw elements positioned from `origin`.
+// Excalidraw regenerates element ids (keeping arrow bindings intact), so repeated generations never collide.
+// Async because the Excalidraw bundle is browser-only and must be imported lazily (never during SSR).
+export const diagramToElements = async (rawSpec: DiagramSpec, origin: Origin, mode?: AiModeId) => {
+  const { convertToExcalidrawElements } = await import("@excalidraw/excalidraw");
+  return convertToExcalidrawElements(buildDiagramSkeleton(rawSpec, origin, mode));
 };

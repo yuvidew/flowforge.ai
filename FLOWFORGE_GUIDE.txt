@@ -77,13 +77,20 @@ Auto layout  For diagram / flowchart / architecture modes the AI does not choose
              so nothing overlaps. For web / mobile modes the AI chooses pixel
              coordinates because wireframes are spatial.
 
-MCP queue    When an external AI sends a diagram, the server does not draw it.
-             It stores it in a queue on the board. The open browser tab picks
-             it up, draws it, saves, and the queue entry is removed.
+MCP routing  When an external AI sends a diagram, the server first checks
+             whether the board is open in a browser tab (the open workspace
+             polls the server every few seconds).
+               - No tab open: the server draws it itself and saves the scene
+                 before answering "Drew". Nothing needs to be open.
+               - Tab open: the diagram goes into a queue on the board; the open
+                 tab draws it with exact text sizes, saves, and the queue entry
+                 is removed. The answer is "Queued".
+             If a server-side draw fails, the diagram falls back to the queue.
 
-Consequence: a diagram sent over MCP appears only while the board is open in a
-browser signed in to the same account. This is the number-one "why is nothing
-showing?" cause (see section 15).
+Consequence: with no tab open the diagram is already saved when the AI answers,
+and it is on the public link at once if the board is published. "Queued" means
+a tab is open and will draw it within seconds (or, after a fallback, the next
+time the board is opened). See section 15.
 
 
 ==============================================================================
@@ -229,7 +236,9 @@ loop after the payment step", "split Payments into its own service").
   create_board       Make a new board. Fails if the name already exists.
   get_drawing_guide  Returns the current design rules for one mode. The AI
                      calls this before drawing.
-  draw_diagram       Queue a diagram on a board. Input: boardId, mode, diagram.
+  draw_diagram       Add a diagram to a board. Input: boardId, mode, diagram.
+                     Drawn and saved at once when no browser tab has the board
+                     open; otherwise queued for the open tab.
   get_board_scene    Read back the elements saved on a board (shapes with text,
                      arrows with the shapes they connect, positions, colours).
                      Input: boardId. Diagrams still queued are not included.
@@ -240,11 +249,14 @@ loop after the payment step", "split Payments into its own service").
                      Input: boardId, diagramId.
   edit_board         Change shapes without redrawing: update_text, set_color,
                      delete. Input: boardId, ops (targeted by diagramId +
-                     nodeId from get_board_scene). Queued.
+                     nodeId from get_board_scene). Applied at once when no tab
+                     is open, otherwise queued. Answers with an error when none
+                     of the shapes is found.
   revise_diagram     Redraw a diagram with steps added / removed. Input:
                      boardId, diagramId, the COMPLETE updated diagram.
-                     Queued; replaces the old diagram in place and gives it a
-                     new diagramId.
+                     Applied at once when no tab is open, otherwise queued;
+                     replaces the old diagram in place and gives it a new
+                     diagramId.
   publish_board      Make the board public (read-only link). Idempotent.
   unpublish_board    Take the public link down. Content is kept.
 
@@ -352,15 +364,17 @@ The golden workflow (what a well-behaved AI does)
   2. Choose the mode and call get_drawing_guide({ mode }).
   3. Design the diagram from your words: real labels, real field names.
   4. draw_diagram({ boardId, mode, diagram }).
-  5. Tell you the workspace link. Diagram shows up while the board is open.
+  5. Tell you the workspace link. With no tab open the diagram is already
+     saved ("Drew"); with a tab open it appears there within seconds ("Queued").
   6. Publish only if you ask.
 
 Rules that protect you
   - The AI must never guess or invent board names or ids. It works only with a
     board you name, or a new one.
   - It must not publish, unpublish or create boards you did not ask for.
-  - draw_diagram answers "Queued" - that means NOT drawn yet. A good AI says so
-    and does not claim the diagram is visible.
+  - draw_diagram answers "Drew" (saved on the board) or "Queued" (NOT drawn
+    yet, a tab will draw it). A good AI says which one happened and does not
+    claim a queued diagram is visible.
   - It must not re-send the same diagram "to be sure". Several diagrams on one
     board: one draw_diagram call each; each new diagram is placed to the right
     of the existing content.
@@ -376,9 +390,10 @@ Changing a diagram that is already on the board
   3. Structural changes (add / remove steps, branches)
        -> get_diagram({ boardId, diagramId }), edit the spec it returns, then
           revise_diagram({ boardId, diagramId, diagram }) with the whole spec.
-  4. Both are queued like draw_diagram: they apply when the board is open in
-     the browser. After revise_diagram the diagram has a new diagramId, so call
-     get_board_scene again before the next change.
+  4. Both follow the same routing as draw_diagram: applied at once when no
+     tab is open, queued for the open tab otherwise. After revise_diagram the
+     diagram has a new diagramId, so call get_board_scene again before the next
+     change.
   5. Web / mobile mockups cannot be revised; draw a new one.
 
 Useful phrases for your AI
@@ -509,17 +524,31 @@ Pattern for every problem below:
      board belongs to that user.
   3. The diagram is validated (strict input schema, then the main diagram
      schema; every edge must point at an existing node id).
-  4. Server appends it to the board's pendingDiagrams list in ONE SQL
-     statement (so concurrent calls never overwrite each other) and answers
-     "Queued".
-  5. The open workspace polls GET /api/whiteboard/pending, converts each
-     pending diagram to elements, places it to the right of existing content,
-     and inserts it.
-  6. The next autosave includes ackPendingIds so the server removes those ids
-     from the queue in the same statement as saving the scene. A diagram
-     leaves the queue only after the scene containing it is saved.
-  7. A diagram that cannot be drawn is acknowledged straight away so it is not
-     retried forever.
+  4. submitToBoard (lib/server-draw.ts) decides the route. The open workspace
+     polls GET /api/whiteboard/pending every 3 seconds, and each poll stamps
+     whiteboardData.lastSeenAt. A board seen in the last 15 seconds counts as
+     "open in a browser".
+  5a. Tab open -> the server appends the item to pendingDiagrams in ONE SQL
+      statement (so concurrent calls never overwrite each other) and answers
+      "Queued". The tab converts each pending diagram to elements, places it
+      to the right of existing content and inserts it. The next autosave
+      includes ackPendingIds so the server removes those ids from the queue in
+      the same statement as saving the scene. A diagram that cannot be drawn
+      is acknowledged straight away so it is not retried forever.
+  5b. No tab -> the server draws it: items already in the queue are applied
+      first (keeps the order), then the new one. The pure part of the
+      conversion (auto layout, sizing, skeleton) is shared with the browser;
+      the skeleton is turned into Excalidraw elements by lib/scene-elements.ts,
+      which estimates text width instead of measuring it with a canvas.
+      The scene is saved with writeScene() and the answer is "Drew".
+  6. writeScene (lib/board-scene.ts) is the only function that writes a
+     board's elements. It is one conditional UPDATE: it matches only while the
+     stored version equals the writer's baseVersion, then bumps the version.
+     A server draw that loses the race reloads the scene and retries (max 3);
+     if it still fails, or the board is very large, the item is queued.
+  7. A browser save with an old baseVersion gets 409. The tab then fetches the
+     newer scene, merges it with Excalidraw's reconcileElements and saves
+     again, so a stale tab never erases a server-side draw or a second tab.
 
 9.5 Authentication
   - Website: Clerk middleware (proxy.ts). If Clerk keys are missing, auth is
@@ -531,9 +560,13 @@ Pattern for every problem below:
 
 9.6 Why the MCP design is like this
   - The connected AI designs the diagram (it is already an LLM). The server
-    only validates and queues - cheaper, no second model, no extra key.
-  - Queue + browser draw: Excalidraw elements are generated in the browser,
-    so the server never needs a canvas.
+    only validates and draws - cheaper, no second model, no extra key.
+  - Two ways to draw: the browser (exact text sizes, used when a tab is open)
+    and the server (works with no tab, text sizes are estimated, so shapes can
+    be a few pixels off). The server cannot use Excalidraw's own converter
+    because it measures text with a canvas.
+  - The queue stays as the fallback: anything the server cannot draw is left
+    for the browser.
 
 
 ==============================================================================
@@ -553,6 +586,10 @@ whiteboardData
   id, projectId (unique, references projects.projectId),
   elements (jsonb), appState (jsonb), files (jsonb),
   pendingDiagrams (jsonb)  <- MCP queue,
+  version (integer, default 0)  <- bumped by every scene write; a save with an
+                                   older baseVersion is rejected with 409,
+  lastSeenAt (timestamp)  <- last poll from an open workspace tab; MCP draws on
+                             the server only when this is older than 15 s,
   updated_at
 
 chatSessions  (one AI chat conversation on a board)
@@ -575,8 +612,12 @@ pendingDiagrams) is a classic cause of 500 errors on MCP calls.
 ==============================================================================
 
   /api/projects, /api/projects/[projectId]   Board CRUD for the signed-in user
-  /api/whiteboard                            Load / save a board's scene
-  /api/whiteboard/pending                    GET queued MCP diagrams,
+  /api/whiteboard                            Load / save a board's scene. GET also
+                                             returns version; POST takes
+                                             baseVersion and answers 409 when
+                                             the board changed elsewhere
+  /api/whiteboard/pending                    GET queued MCP diagrams (also the
+                                             "tab is open" heartbeat),
                                              POST acknowledge ids
   /api/public/whiteboard                     Read-only scene of a published board
   /api/ai, /api/ai/generate                  In-app diagram generation
@@ -758,16 +799,25 @@ Boards and drawing
   "A board named X already exists"     Use open_board instead of create_board.
   "Board not found"                    The boardId is wrong or not yours. Call
                                        open_board / create_board again.
-  "Queued" but nothing appears         Open the workspace link in a browser,
-                                       signed in to the SAME account, and keep
-                                       the tab open a few seconds.
+  "Queued" but nothing appears         "Queued" means a tab had the board open
+                                       (or the server draw failed and fell
+                                       back). Open the workspace link in a
+                                       browser, signed in to the SAME account,
+                                       and keep the tab open a few seconds.
+  Always "Queued" with no tab open     Wait ~15 s after closing the tab (the
+                                       heartbeat window). If it still queues,
+                                       check the server log for "Server-side
+                                       draw failed" - usually db:push was not
+                                       run (version / last_seen_at columns).
   "These edges point at ids that are   The diagram referenced a node id that
   not in nodes"                        does not exist. The AI must fix the listed
                                        edges and call draw_diagram once more.
   "The diagram is not valid"           A field has the wrong type. Check against
                                        the tool schema and retry.
-  Public link shows nothing new        Queued diagrams are not drawn until the
-                                       workspace is opened once. Open it first.
+  Public link shows nothing new        Queued diagrams are not drawn until a tab
+                                       draws them. Open the workspace first.
+                                       Diagrams answered with "Drew" are
+                                       already on the public link.
   Diagram overlaps / ugly layout       Only web/mobile use AI coordinates. For
                                        other modes layout is automatic - the
                                        cause is usually labels too long for the
@@ -804,9 +854,13 @@ Developer
   - One diagram per draw_diagram call; up to 50 ids acknowledged per save.
   - Publishing exposes the board to anyone with the link.
   - No board listing and no delete over MCP - by design.
-  - MCP diagrams need an open browser tab to be drawn.
+  - MCP diagrams do not need an open tab: with none open the server draws and
+    saves them. With a tab open they are queued and the tab draws them.
+  - Server-drawn text sizes are estimated, so shapes can be a few pixels off
+    compared with browser-drawn ones. Boards over 5000 elements are always left
+    to the browser.
   - get_board_scene returns only what is already saved; diagrams still queued
-    appear after the board has been opened in the browser.
+    (a tab is open, or a server draw fell back) are not included until drawn.
   - edit_board changes only shapes FlowForge drew (they carry nodeId and
     diagramId); hand-drawn shapes cannot be edited. It cannot move, resize or
     connect shapes.
@@ -843,7 +897,7 @@ Mode picker
     phone screens              -> mobile
 
 Remember
-    1. "Queued" is not "drawn". Open the workspace link.
+    1. "Drew" = saved. "Queued" is not drawn yet - a tab draws it.
     2. Same account in the browser and in the MCP sign-in.
     3. Give exact board names - boards cannot be listed.
     4. Publish only on purpose.

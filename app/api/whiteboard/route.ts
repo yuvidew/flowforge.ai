@@ -4,6 +4,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { withoutPendingIds } from "@/lib/boards";
+import { writeScene } from "@/lib/board-scene";
 
 
 
@@ -39,7 +40,7 @@ export const POST = async (req: NextRequest) => {
             );
         }
 
-        const { projectId, elements, appState, files, ackPendingIds  } = parsed.data;
+        const { projectId, elements, appState, files, ackPendingIds, baseVersion } = parsed.data;
 
         // Ownership check: the project must belong to the signed-in user.
         const project = await getOwnedProject(projectId, email);
@@ -48,24 +49,17 @@ export const POST = async (req: NextRequest) => {
             return NextResponse.json({ error: "Project not found" }, { status: 404 });
         }
 
-        // Relies on the unique constraint on whiteboardData.projectId.
-        await db
-            .insert(whiteboardData)
-            .values({ projectId, elements, appState, files })
-            .onConflictDoUpdate({
-                target: whiteboardData.projectId,
-                set: {
-                    elements,
-                    appState,
-                    files,
-                    updatedAt: new Date(),
-                    // Same statement as the scene save: a diagram leaves the queue exactly when it is saved.
-                    ...(ackPendingIds?.length ? { pendingDiagrams: withoutPendingIds(ackPendingIds) } : {}),
-                },
+        const result = await writeScene({ projectId, elements, appState, files, ackPendingIds, baseVersion });
 
-            });
+        // Someone else (a server-side MCP draw, another tab) saved first; the client merges and saves again.
+        if (!result.ok) {
+            return NextResponse.json(
+                { error: "The board changed elsewhere", serverVersion: result.serverVersion },
+                { status: 409 },
+            );
+        }
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, version: result.version });
     } catch (error) {
         console.error("POST /api/whiteboard failed", error);
         return NextResponse.json({ error: "Failed to save whiteboard" }, { status: 500 });
@@ -104,6 +98,7 @@ export const GET = async (req: NextRequest) => {
             elements: row?.elements ?? [],
             appState: row?.appState ?? {},
             files: row?.files ?? {},
+            version: row?.version ?? 0,
         });
     } catch (error) {
         console.error("GET /api/whiteboard failed", error);

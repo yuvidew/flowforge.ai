@@ -13,6 +13,8 @@ export const saveWhiteboardSchema = z.object({
     files: z.record(z.string(), z.unknown()),
     // MCP diagrams that are part of this scene; the server drops them from the pending queue in the same statement.
     ackPendingIds: z.array(z.string().min(1)).max(50).optional(),
+    // Scene version this save was based on; a mismatch means the board changed elsewhere (409).
+    baseVersion: z.number().int().min(0).optional(),
 });
 
 

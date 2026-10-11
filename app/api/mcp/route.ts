@@ -7,6 +7,7 @@ import { diagramInputSchema } from "@/features/workspace/ai/mcp-diagram-input";
 import { getSystemPrompt } from "@/features/workspace/ai/prompts";
 import { verifyClerkToken } from "@clerk/mcp-tools/next";
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { submitToBoard } from "@/lib/server-draw";
 
 import {
   countPendingDiagrams,
@@ -15,7 +16,6 @@ import {
   getBoardDiagram,
   getBoardScene,
   getOwnedBoard,
-  queueDiagram,
   setBoardPublished,
 } from "@/lib/boards";
 import { editOpSchema } from "@/features/workspace/schema";
@@ -166,16 +166,20 @@ const handler = createMcpHandler(
           );
         }
 
-        await queueDiagram(boardId, {
+        const status = await submitToBoard(boardId, {
           id: crypto.randomUUID(),
           mode,
           spec: parsed.data,
           createdAt: new Date().toISOString(),
         });
 
+        const summary = `"${parsed.data.title}" (${parsed.data.nodes.length} nodes)`;
         return reply(
-          `Queued "${parsed.data.title}" (${parsed.data.nodes.length} nodes). It is drawn when the board is open in the browser, so tell the user to open ${APP_URL}/workspace/${boardId}. It is NOT visible on the public link until then.`,
+          status === "drawn"
+            ? `Drew ${summary} on the board; it is saved. The user can open ${APP_URL}/workspace/${boardId}${board.isPublished ? " (it is also on the public link)" : ""}.`
+            : `Queued ${summary}. A browser tab with the board open draws it within seconds; otherwise it is drawn the next time the board is opened (${APP_URL}/workspace/${boardId}). It is NOT on the public link until then.`,
         );
+
       },
     );
 
@@ -240,20 +244,26 @@ const handler = createMcpHandler(
       async ({ boardId, ops }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
-        
+
         const board = await getOwnedBoard(email, boardId);
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
 
-        await queueDiagram(boardId, {
+        const status = await submitToBoard(boardId, {
           id: crypto.randomUUID(),
           kind: "edit",
           ops,
           createdAt: new Date().toISOString(),
         });
 
+        if (status === "no-match") {
+          return reply("None of these shapes were found on the saved board. Call get_board_scene again for the current diagramId / nodeId values.", true);
+        }
         return reply(
-          `Queued ${ops.length} edit(s). They are applied when the board is open in the browser, so tell the user to open ${APP_URL}/workspace/${boardId}.`,
+          status === "drawn"
+            ? `Applied ${ops.length} edit(s); the board is saved.`
+            : `Queued ${ops.length} edit(s). An open browser tab applies them within seconds; otherwise they apply the next time the board is opened (${APP_URL}/workspace/${boardId}).`,
         );
+
       }
     );
 
@@ -266,11 +276,11 @@ const handler = createMcpHandler(
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
         }),
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint:true, openWorldHint: false }
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
       },
-      async ({ boardId, diagramId}, ctx) => {
+      async ({ boardId, diagramId }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
-        if(!email) return reply("Unauthorized", true);
+        if (!email) return reply("Unauthorized", true);
 
         const board = await getOwnedBoard(email, boardId);
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
@@ -288,9 +298,9 @@ const handler = createMcpHandler(
     );
 
     server.registerTool(
-      "revise_dtagram",
+      "revise_diagram",
       {
-        title : "Refraw a diagram with changes",
+        title: "Refraw a diagram with changes",
         description:
           "Changes the STRUCTURE of a diagram already on the board: add, remove or reorder steps or components, add branches, add detail. Call get_board_scene for the diagramId, then get_diagram, change the spec it returns and pass the COMPLETE updated spec as `diagram` (all nodes and edges, not a patch). Keep the ids, labels and colours of nodes you don't change; give new nodes new unique ids; connect new nodes with edges. Positions are recomputed automatically, so x and y can be 0. Not available for web/mobile mockups (draw a new diagram instead). For only renaming, recolouring or deleting shapes use edit_board. The old diagram is replaced the next time the board is open in the browser, in the same place, and the diagram gets a new diagramId (call get_board_scene again before further changes).",
         inputSchema: z.object({
@@ -319,9 +329,9 @@ const handler = createMcpHandler(
         }
 
         const parsed = diagramSchema.safeParse(diagram);
-        if(!parsed.success) return reply("The diagram is not valid. Check the field types and try again.", true);
+        if (!parsed.success) return reply("The diagram is not valid. Check the field types and try again.", true);
 
-         // Unknown edge targets are the most common model mistake; naming them lets the AI fix and retry.
+        // Unknown edge targets are the most common model mistake; naming them lets the AI fix and retry.
         const ids = new Set(parsed.data.nodes.map((node) => node.id));
         const unknown = parsed.data.edges.filter((edge) => !ids.has(edge.from) || !ids.has(edge.to));
         if (unknown.length > 0) {
@@ -331,7 +341,7 @@ const handler = createMcpHandler(
           );
         };
 
-        await queueDiagram(boardId, {
+        const status = await submitToBoard(boardId, {
           id: crypto.randomUUID(),
           kind: "revise",
           diagramId,
@@ -341,9 +351,16 @@ const handler = createMcpHandler(
           createdAt: new Date().toISOString(),
         });
 
+        if (status === "no-match") {
+          return reply("Diagram not found on the saved board. Call get_board_scene for the current diagramIds.", true);
+        }
+        const summary = `"${parsed.data.title}" (${parsed.data.nodes.length} nodes)`;
         return reply(
-          `Queued the updated "${parsed.data.title}" (${parsed.data.nodes.length} nodes). It replaces the old diagram when the board is open in the browser, so tell the user to open ${APP_URL}/workspace/${boardId}.`,
+          status === "drawn"
+            ? `Redrew ${summary} in place and saved it. The diagram has a new diagramId: call get_board_scene before further changes.`
+            : `Queued the updated ${summary}. It replaces the old diagram when the board is open in the browser (${APP_URL}/workspace/${boardId}).`,
         );
+
       }
     )
 

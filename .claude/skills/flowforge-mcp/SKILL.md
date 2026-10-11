@@ -5,7 +5,7 @@ description: Use when the user wants to create or add diagrams, flowcharts, arch
 
 # FlowForge MCP
 
-FlowForge is a whiteboard app (Excalidraw canvas). Its MCP server lets an AI assistant create boards, draw diagrams on them, read them back and change them. **You (the connected AI) design the diagram yourself**; the server does not call any other model. It only validates what you send, queues it, and the user's open browser tab draws it.
+FlowForge is a whiteboard app (Excalidraw canvas). Its MCP server lets an AI assistant create boards, draw diagrams on them, read them back and change them. **You (the connected AI) design the diagram yourself**; the server does not call any other model. It validates what you send and draws it: on the server right away when the board is not open in a browser, or through the user's open browser tab (queued) when it is.
 
 ## Connect
 
@@ -32,7 +32,7 @@ If the `flowforge` tools are not available yet, or the user asks how to connect 
 2. **Pick the mode** (see below) and call `get_drawing_guide({ mode })`. It returns the full, current design rules for that mode (sizes, colours, layout, label style). Follow it; this skill is only a summary.
 3. **Design the diagram** from the user's request: specific, realistic labels (real field names, button texts, technologies), not generic placeholders.
 4. **Draw it** with `draw_diagram({ boardId, mode, diagram })`.
-5. **Tell the user** the `workspaceUrl` and that the diagram appears there within a few seconds *while the board is open in the browser*.
+5. **Tell the user** the `workspaceUrl`, and say what the response said: "Drew" means it is already saved on the board; "Queued" means a browser tab has the board open and will draw it within a few seconds.
 6. Publish only on request: `publish_board({ boardId })` / `unpublish_board({ boardId })`.
 
 For several diagrams on one board, call `draw_diagram` once per diagram. Each new one is placed to the right of the existing content. Do not resend a diagram that was already queued.
@@ -44,11 +44,11 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 | `open_board` | Find an existing board by exact name (case-insensitive, archived boards are skipped) |
 | `create_board` | Create a new board; fails if that name already exists (then use `open_board`) |
 | `get_drawing_guide` | Get the design rules for one mode. Call before `draw_diagram` |
-| `draw_diagram` | Queue a diagram for the board |
-| `get_board_scene` | Read the elements saved on the board (shapes, text, arrow connections, positions). Shapes FlowForge drew carry `nodeId` and `diagramId`. Queued diagrams are not included until the board is opened in the browser |
+| `draw_diagram` | Add a diagram to the board. Drawn and saved at once when no browser tab has the board open; otherwise queued for the open tab |
+| `get_board_scene` | Read the elements saved on the board (shapes, text, arrow connections, positions). Shapes FlowForge drew carry `nodeId` and `diagramId`. Diagrams that are only queued are not included until drawn |
 | `get_diagram` | Read one saved diagram as a spec in the `draw_diagram` format, plus its `mode` and `revisable` |
-| `edit_board` | Rename (`update_text`), recolour (`set_color`) or `delete` shapes, targeted by `diagramId` + `nodeId`. Queued |
-| `revise_diagram` | Redraw a diagram with steps added or removed: pass the COMPLETE updated spec. Queued; replaces the old diagram in place |
+| `edit_board` | Rename (`update_text`), recolour (`set_color`) or `delete` shapes, targeted by `diagramId` + `nodeId`. Applied at once when no tab is open, otherwise queued; errors when no shape is found |
+| `revise_diagram` | Redraw a diagram with steps added or removed: pass the COMPLETE updated spec. Applied at once when no tab is open, otherwise queued; replaces the old diagram in place |
 | `publish_board` | Make the board public (read-only link). Idempotent, same link every time |
 | `unpublish_board` | Take the public link down. Content is kept |
 
@@ -60,7 +60,7 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
    - Keep the ids, labels and colours of nodes you do not change; give new nodes new unique ids; keep the flow connected (when inserting between A and B, replace the edge A->B with A->new->B).
    - `x` and `y` can be `0`: the layout is recomputed.
    - Not possible when `revisable` is false (web/mobile mockups, or a diagram that is not saved yet). Draw a new diagram instead.
-4. Both are queued like `draw_diagram`: they apply when the board is open in the browser. After `revise_diagram` the diagram gets a **new `diagramId`**, so call `get_board_scene` again before further changes.
+4. Both are routed like `draw_diagram`: applied at once when no tab is open, queued for the open tab otherwise. After `revise_diagram` the diagram gets a **new `diagramId`**, so call `get_board_scene` again before further changes.
 
 ## Choosing a mode
 
@@ -84,7 +84,8 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 
 ## What the responses mean
 
-- `draw_diagram` returns "Queued". The diagram is **not drawn yet**: it appears when the board is open in the browser. Never tell the user it is already on the board, and never say it is visible on the public link before it has been drawn.
+- `draw_diagram` returns either "Drew" or "Queued". "Drew" means the diagram is saved on the board (and already on the public link if the board is published). "Queued" means it is **not drawn yet**: a browser tab with the board open draws it within seconds. Never tell the user a queued diagram is already on the board, and never say it is visible on the public link before it has been drawn.
+- Server-drawn text sizes are estimates, so shapes can be a few pixels off compared with browser-drawn ones; that is expected.
 - Two different links: `workspaceUrl` is private (sign-in required, where the user edits); `publicUrl` is read-only and exists only when `published` is true. Do not hand out `publicUrl` for an unpublished board.
 - `publish_board` may warn that queued diagrams are not drawn yet. Pass that on and ask the user to open the workspace URL first.
 
@@ -98,6 +99,7 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 | `Board not found` | Call `open_board` / `create_board` again for a valid `boardId` |
 | `These edges point at ids that are not in nodes` | Fix the listed edges and call `draw_diagram` / `revise_diagram` again |
 | `Diagram not found on the saved board` | Call `get_board_scene` for the current `diagramId`s (queued diagrams are not saved yet) |
+| `None of these shapes were found on the saved board` | Call `get_board_scene` again for the current `diagramId` / `nodeId` values (the diagram may have been revised or the shape deleted) |
 | `Web and mobile mockups can't be revised` | Draw a new mockup with `draw_diagram` |
 | `The diagram is not valid` | Check field types against the tool schema and retry |
 | `Unauthorized` / 401 | The user must re-authenticate the `flowforge` server in the client |
@@ -106,5 +108,5 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 
 - List, guess or enumerate boards.
 - Publish, unpublish or create boards the user did not ask for.
-- Claim a diagram is drawn or public when the response says it is only queued.
+- Claim a diagram is drawn or public when the response says "Queued".
 - Send the same diagram repeatedly "to make sure"; check the response instead.
