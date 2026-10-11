@@ -5,6 +5,7 @@ FlowForge is an AI whiteboard. Describe an idea in plain words and it draws a fl
 ## Features
 
 - **AI diagram generation** — five modes: `diagram`, `flowchart`, `architecture`, `web`, `mobile`. Flowcharts, diagrams and architecture use automatic layout (dagre); wireframes use explicit coordinates.
+- **AI chat** — the AI button on a board opens a chat. Ask a question, draw a new diagram (optionally pick the diagram type with the icons under the message box), edit shapes already on the board (rename, recolour, delete) or change a diagram's structure ("add token generation steps after *Generate token*"). Conversations are saved as sessions per board, listed from the chat menu, and the open session is kept in the URL (`?session=<id>`), so a reload reopens it.
 - **Whiteboard** — themed Excalidraw canvas with autosave, custom toolbar and a floating options bar.
 - **Boards** — create, rename, archive, restore and delete; random cover images.
 - **Publishing** — share a board read-only at `/view/<boardId>`; unpublish any time.
@@ -21,7 +22,7 @@ FlowForge is an AI whiteboard. Describe an idea in plain words and it draws a fl
 | Data fetching | TanStack Query v5 + axios |
 | Auth | Clerk |
 | Database | Neon Postgres + Drizzle ORM |
-| AI | Vercel AI SDK with Mistral models |
+| AI | Vercel AI SDK with Groq and Mistral models |
 | Background jobs | Inngest |
 | MCP | `mcp-handler`, `@clerk/mcp-tools` (OAuth via Clerk) |
 
@@ -44,7 +45,8 @@ Create a `.env` file in the project root:
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk keys. Without them auth is skipped for local development. |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | Clerk sign-in / sign-up routes |
 | `CLERK_WEBHOOK_SIGNING_SECRET` | Verifies the Clerk user-sync webhook (`/api/webhooks/clerk`) |
-| `MISTRAL_AI` (or `MISTRAL_API_KEY`) | Mistral API key for diagram generation |
+| `GROQ_API_KEY` | Groq API key (first model tried for generation and chat) |
+| `MISTRAL_AI` (or `MISTRAL_API_KEY`) | Mistral API key (fallback models) |
 | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | Inngest background jobs |
 
 ### 3. Database
@@ -152,7 +154,7 @@ Ask your AI, for example:
 
 > On FlowForge, create a board called "Connection Test" and draw a small flowchart of a login flow.
 
-Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`, `get_board_scene`, `publish_board`, `unpublish_board`. Diagrams are queued on the server and drawn when the board is open in your browser. Boards can't be listed, so give the exact board name.
+Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`, `get_board_scene`, `get_diagram`, `edit_board`, `revise_diagram`, `publish_board`, `unpublish_board`. `get_board_scene` and `get_diagram` read a board back, `edit_board` renames, recolours or deletes shapes, and `revise_diagram` redraws a diagram with steps added or removed. Diagrams and changes are queued on the server and applied when the board is open in your browser. Boards can't be listed, so give the exact board name.
 
 ### Server requirements (self-hosting)
 
