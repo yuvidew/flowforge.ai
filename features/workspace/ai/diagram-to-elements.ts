@@ -140,6 +140,12 @@ const getRouteColor = (node: SpecNode) => {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.8 ? NEUTRAL_ROUTE_COLOR : node.stroke;
 };
 
+// Where to pass as `origin` so that a re-drawn diagram's backdrop starts at the given top-left corner (the old one's).
+export const originForBackdrop = (left: number, top: number): Origin => ({
+  x: left + BACKDROP_PADDING,
+  y: top + BACKDROP_PADDING + BACKDROP_TITLE_HEIGHT,
+});
+
 // Backdrop panel + title behind the whole diagram, sized from every shape, text and arrow point; empty array if there is nothing to frame.
 const buildBackdrop = (
   spec: DiagramSpec,
@@ -227,7 +233,7 @@ export const diagramToElements = async (rawSpec: DiagramSpec, origin: Origin, mo
     fillStyle: "solid",
     groupIds,
     // Survives id regeneration and autosave; lets MCP tools target "node n3 of this diagram" later.
-    customData: { nodeId: node.id, diagramId },
+    customData: { nodeId: node.id, diagramId, ...(mode ? { mode } : {}) },
     // Empty labels (decorative containers) must not create an empty text element.
     ...(node.label
       ? { label: { text: node.label, fontSize: node.fontSize ?? 16, strokeColor: getLabelColor(node.fill) } }

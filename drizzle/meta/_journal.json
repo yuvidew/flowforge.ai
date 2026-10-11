@@ -15,6 +15,13 @@
       "when": 1791373210656,
       "tag": "0001_elite_lady_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791645694393,
+      "tag": "0002_aspiring_radioactive_man",
+      "breakpoints": true
     }
   ]
 }
