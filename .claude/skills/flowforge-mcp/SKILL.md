@@ -1,11 +1,11 @@
 ---
 name: flowforge-mcp
-description: Use when the user wants to create or add diagrams, flowcharts, architecture diagrams, or web/mobile wireframes on a FlowForge board, open or create a FlowForge board by name, or publish/unpublish a board, through the FlowForge MCP server. Covers connecting, the tool workflow, diagram rules and error handling.
+description: Use when the user wants to create or add diagrams, flowcharts, architecture diagrams, or web/mobile wireframes on a FlowForge board, change or extend a diagram already on a board, open or create a FlowForge board by name, or publish/unpublish a board, through the FlowForge MCP server. Covers connecting, the tool workflow, diagram rules and error handling.
 ---
 
 # FlowForge MCP
 
-FlowForge is a whiteboard app (Excalidraw canvas). Its MCP server lets an AI assistant create boards and draw diagrams on them. **You (the connected AI) design the diagram yourself**; the server does not call any other model. It only validates what you send, queues it, and the user's open browser tab draws it.
+FlowForge is a whiteboard app (Excalidraw canvas). Its MCP server lets an AI assistant create boards, draw diagrams on them, read them back and change them. **You (the connected AI) design the diagram yourself**; the server does not call any other model. It only validates what you send, queues it, and the user's open browser tab draws it.
 
 ## Connect
 
@@ -21,6 +21,7 @@ If the `flowforge` tools are not available yet, or the user asks how to connect 
 4. Only publish when the user explicitly asks. Publishing makes the board readable by anyone with the link.
 5. Do not print the diagram JSON in chat. Pass it as the `diagram` argument of `draw_diagram`.
 6. There is no delete tool. Do not try to work around that.
+7. To change a diagram that is already on the board, edit it (see "Changing a diagram already on the board"). Never draw a second copy of it with `draw_diagram`.
 
 ## Workflow
 
@@ -44,9 +45,22 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 | `create_board` | Create a new board; fails if that name already exists (then use `open_board`) |
 | `get_drawing_guide` | Get the design rules for one mode. Call before `draw_diagram` |
 | `draw_diagram` | Queue a diagram for the board |
-| `get_board_scene` | Read the elements saved on the board (shapes, text, arrow connections, positions). Queued diagrams are not included until the board is opened in the browser |
+| `get_board_scene` | Read the elements saved on the board (shapes, text, arrow connections, positions). Shapes FlowForge drew carry `nodeId` and `diagramId`. Queued diagrams are not included until the board is opened in the browser |
+| `get_diagram` | Read one saved diagram as a spec in the `draw_diagram` format, plus its `mode` and `revisable` |
+| `edit_board` | Rename (`update_text`), recolour (`set_color`) or `delete` shapes, targeted by `diagramId` + `nodeId`. Queued |
+| `revise_diagram` | Redraw a diagram with steps added or removed: pass the COMPLETE updated spec. Queued; replaces the old diagram in place |
 | `publish_board` | Make the board public (read-only link). Idempotent, same link every time |
 | `unpublish_board` | Take the public link down. Content is kept |
+
+## Changing a diagram already on the board
+
+1. `get_board_scene({ boardId })` -> find the `diagramId` and the `nodeId`s. Shapes with null ids (hand-drawn or very old) cannot be targeted.
+2. **Small change** (rename, recolour, remove a shape) -> `edit_board({ boardId, ops })`. Ops: `update_text`, `set_color`, `delete`. Deleting a shape also removes its arrows.
+3. **Structural change** (add or remove steps, add a branch, add detail) -> `get_diagram({ boardId, diagramId })`, change the spec it returns, then `revise_diagram({ boardId, diagramId, diagram })` with the whole updated spec (all nodes and edges, not a patch).
+   - Keep the ids, labels and colours of nodes you do not change; give new nodes new unique ids; keep the flow connected (when inserting between A and B, replace the edge A->B with A->new->B).
+   - `x` and `y` can be `0`: the layout is recomputed.
+   - Not possible when `revisable` is false (web/mobile mockups, or a diagram that is not saved yet). Draw a new diagram instead.
+4. Both are queued like `draw_diagram`: they apply when the board is open in the browser. After `revise_diagram` the diagram gets a **new `diagramId`**, so call `get_board_scene` again before further changes.
 
 ## Choosing a mode
 
@@ -82,7 +96,9 @@ For several diagrams on one board, call `draw_diagram` once per diagram. Each ne
 | `More than one board is named "X"` | Ask the user to rename one or give a more specific name |
 | `A board named "X" already exists` | Use `open_board` instead |
 | `Board not found` | Call `open_board` / `create_board` again for a valid `boardId` |
-| `These edges point at ids that are not in nodes` | Fix the listed edges and call `draw_diagram` again |
+| `These edges point at ids that are not in nodes` | Fix the listed edges and call `draw_diagram` / `revise_diagram` again |
+| `Diagram not found on the saved board` | Call `get_board_scene` for the current `diagramId`s (queued diagrams are not saved yet) |
+| `Web and mobile mockups can't be revised` | Draw a new mockup with `draw_diagram` |
 | `The diagram is not valid` | Check field types against the tool schema and retry |
 | `Unauthorized` / 401 | The user must re-authenticate the `flowforge` server in the client |
 

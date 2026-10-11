@@ -39,8 +39,10 @@ app screens.
 
 Two ways to get a diagram onto a board:
 
-  A) Inside the app - type a description in the AI sidebar of a board and pick a
-     mode. FlowForge asks a Mistral model for the diagram and draws it.
+  A) Inside the app - open the AI chat on a board and describe the diagram (or
+     pick a type with the icons). FlowForge asks an AI model (Groq, with Mistral
+     as fallback) for the diagram and draws it. The same chat can also edit or
+     restructure diagrams that are already on the board.
 
   B) From your own AI tool through MCP - Claude Code, Cursor, VS Code, OpenCode,
      claude.ai, Claude Desktop or ChatGPT. Your AI designs the diagram itself
@@ -101,8 +103,29 @@ showing?" cause (see section 15).
   - Big Excalidraw canvas with a custom toolbar and a floating options bar.
   - Board name is editable at the top and autosaves.
   - Light / dark / system theme (Settings in the user menu).
-  - AI sidebar: choose a mode, describe the diagram, generate.
+  - AI chat (the AI button, bottom-right): see 3.3.1.
   - Publish dialog: turn the public link on or off.
+
+3.3.1 The AI chat
+  - Opens from the AI button. Say what you want: ask a question, draw a new
+    diagram, change shapes that are already on the board, or restructure a
+    diagram. The AI decides which one from your message.
+  - The icons under the message box (diagram, flowchart, architecture, web
+    mockup, mobile mockup) are an optional hint for NEW diagrams. Click one to
+    pick it, click it again to let the AI decide. It resets after each message.
+  - Change shapes: select a shape first and say "make this red" or "rename
+    Database to PostgreSQL". Works on shapes FlowForge drew (hand-drawn shapes
+    have no ids and cannot be edited). One Ctrl+Z undoes it.
+  - Change structure: "after Generate token add the steps for creating it with
+    jsonwebtoken". The whole diagram is drawn again, in the same place, with the
+    change and a fresh automatic layout. One Ctrl+Z brings the old one back.
+    Not available for web / mobile mockups; manual moves are not kept.
+  - Sessions: every conversation is saved on its board. The three-dots menu
+    renames the session, opens the session list or deletes it (with a
+    confirmation). Older messages load when you scroll up.
+  - The open session is kept in the address (?session=<id>), so reloading or
+    sharing the link reopens the same conversation.
+  - The chat stays open when you click elsewhere on the page; close it with X.
 
 3.4 Publish a board
   Publishing makes the board readable by ANYONE with the link
@@ -209,6 +232,18 @@ loop after the payment step", "split Payments into its own service").
   get_board_scene    Read back the elements saved on a board (shapes with text,
                      arrows with the shapes they connect, positions, colours).
                      Input: boardId. Diagrams still queued are not included.
+                     Shapes FlowForge drew carry nodeId + diagramId.
+  get_diagram        Read one saved diagram as a spec in the draw_diagram
+                     format (nodes, edges, labels, colours) plus its mode and
+                     "revisable" (false for web / mobile mockups).
+                     Input: boardId, diagramId.
+  edit_board         Change shapes without redrawing: update_text, set_color,
+                     delete. Input: boardId, ops (targeted by diagramId +
+                     nodeId from get_board_scene). Queued.
+  revise_diagram     Redraw a diagram with steps added / removed. Input:
+                     boardId, diagramId, the COMPLETE updated diagram.
+                     Queued; replaces the old diagram in place and gives it a
+                     new diagramId.
   publish_board      Make the board public (read-only link). Idempotent.
   unpublish_board    Take the public link down. Content is kept.
 
@@ -334,6 +369,17 @@ Two links, do not mix them up
   publicUrl      Read-only. Exists only when published is true. Share this one
                  with other people - and only after publishing.
 
+Changing a diagram that is already on the board
+  1. get_board_scene({ boardId }) -> find the diagramId and nodeIds.
+  2. Small changes (text, colour, delete)  -> edit_board.
+  3. Structural changes (add / remove steps, branches)
+       -> get_diagram({ boardId, diagramId }), edit the spec it returns, then
+          revise_diagram({ boardId, diagramId, diagram }) with the whole spec.
+  4. Both are queued like draw_diagram: they apply when the board is open in
+     the browser. After revise_diagram the diagram has a new diagramId, so call
+     get_board_scene again before the next change.
+  5. Web / mobile mockups cannot be revised; draw a new one.
+
 Useful phrases for your AI
   "Open the board 'Sprint Planning' on FlowForge and add an architecture
    diagram of ..."
@@ -427,7 +473,7 @@ Pattern for every problem below:
   TanStack Query v5 + axios for all client API calls
   Clerk for auth; webhook keeps a users table in sync
   Neon serverless Postgres with Drizzle ORM
-  Vercel AI SDK + Mistral models for in-app generation
+  Vercel AI SDK + Groq (first) and Mistral (fallback) models for in-app AI
   Inngest for background jobs (currently the sample function only)
   mcp-handler + @clerk/mcp-tools for the MCP server
 
@@ -445,8 +491,9 @@ Pattern for every problem below:
   1. User types a description and picks a mode in the AI sidebar.
   2. Client POSTs to /api/ai/generate { mode, prompt }.
   3. Server checks sign-in, validates the body (zod).
-  4. Server calls Mistral with the mode's system prompt and a diagram schema,
-     trying models in order (ministral-14b, then ministral-8b). A model that is
+  4. Server calls the model with the mode's system prompt and a diagram schema,
+     trying models in order (Groq gpt-oss-120b, then Mistral ministral-14b and
+     ministral-8b). A model that is
      rate limited (429), overloaded (503), too slow (55 s limit) or not
      available on the plan (403/404) falls through to the next.
   5. Output is validated against the diagram schema and returned as JSON.
@@ -507,6 +554,16 @@ whiteboardData
   pendingDiagrams (jsonb)  <- MCP queue,
   updated_at
 
+chatSessions  (one AI chat conversation on a board)
+  id (uuid pk), projectId (references projects.projectId, cascade delete),
+  userEmail, name (max 60, first ~40 characters of the first message),
+  created_at, updated_at (bumped on every message; the list sorts by it)
+
+chatMessages
+  id (serial pk, also the pagination cursor), sessionId (references
+  chatSessions.id, cascade delete), role ("user" | "assistant"), content,
+  created_at
+
 Apply changes:  npm run db:push   (dev)   or  db:generate + migrations.
 Forgetting db:push after pulling a change that adds a column (for example
 pendingDiagrams) is a classic cause of 500 errors on MCP calls.
@@ -521,7 +578,22 @@ pendingDiagrams) is a classic cause of 500 errors on MCP calls.
   /api/whiteboard/pending                    GET queued MCP diagrams,
                                              POST acknowledge ids
   /api/public/whiteboard                     Read-only scene of a published board
-  /api/ai, /api/ai/generate                  In-app diagram generation (Mistral)
+  /api/ai, /api/ai/generate                  In-app diagram generation
+  /api/ai/chat                               One chat turn: the AI decides to
+                                             reply, create, edit or revise, and
+                                             the turn is saved to the session
+  /api/ai/revise                             Full updated spec of a diagram
+                                             after a requested change
+  /api/ai/chat-sessions                      GET a board's sessions
+                                             (?projectId=)
+  /api/ai/chat-sessions/[sessionId]          PATCH rename, DELETE
+  /api/ai/chat-sessions/[sessionId]/messages
+                                             GET a page of messages
+                                             (?limit=50&before=<messageId>)
+  /api/ai/chat-sessions/[sessionId]/messages/[messageId]
+                                             PATCH correct a saved assistant
+                                             message (when the canvas step
+                                             failed)
   /api/mcp                                   MCP server (OAuth required)
   /api/users                                 User helper
   /api/webhooks/clerk                        Clerk user.created/updated/deleted
@@ -559,7 +631,8 @@ Pages
     NEXT_PUBLIC_CLERK_SIGN_IN_URL       e.g. /sign-in
     NEXT_PUBLIC_CLERK_SIGN_UP_URL       e.g. /sign-up
     CLERK_WEBHOOK_SIGNING_SECRET        verifies the Clerk webhook
-    MISTRAL_AI (or MISTRAL_API_KEY)     in-app diagram generation
+    GROQ_API_KEY                        in-app AI (first model tried)
+    MISTRAL_AI (or MISTRAL_API_KEY)     in-app AI (fallback models)
     INNGEST_EVENT_KEY, INNGEST_SIGNING_KEY   background jobs
 
   Never commit real keys.
@@ -615,7 +688,7 @@ The OAuth login for MCP works only when ALL of these are true:
         app/.well-known/oauth-protected-resource/api/mcp/route.ts
   4. The database has the latest schema (npm run db:push).
   5. The Clerk webhook points to /api/webhooks/clerk with its signing secret.
-  6. Mistral key set (in-app generation). Long model calls are allowed up to
+  6. Groq / Mistral keys set (in-app AI). Long model calls are allowed up to
      120 s on hosts that cap function time (maxDuration).
 
 Quick health checks (replace host):
@@ -733,8 +806,18 @@ Developer
   - MCP diagrams need an open browser tab to be drawn.
   - get_board_scene returns only what is already saved; diagrams still queued
     appear after the board has been opened in the browser.
-  - No edit tool over MCP yet: changing one shape means drawing a new diagram.
-  - In-app generation depends on Mistral free-tier rate limits.
+  - edit_board changes only shapes FlowForge drew (they carry nodeId and
+    diagramId); hand-drawn shapes cannot be edited. It cannot move, resize or
+    connect shapes.
+  - revise_diagram / chat "revise" redraw the whole diagram with a fresh
+    automatic layout: manual moves and re-routed or detached arrows are not
+    kept. Web / mobile mockups cannot be revised.
+  - Chat: the AI sees up to 300 FlowForge shapes of the board and the last 12
+    messages of the session. A chat message is at most 2000 characters.
+  - Chat history is saved when the AI answers. If the canvas step then fails
+    (for example the shapes were deleted meanwhile) the saved reply is
+    rewritten to say so.
+  - In-app AI depends on the free-tier rate limits of Groq and Mistral.
   - Credits column exists on users (default 3) but is not enforced by the
     documented flows.
 

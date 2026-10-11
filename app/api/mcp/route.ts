@@ -12,6 +12,7 @@ import {
   countPendingDiagrams,
   createBoardForUser,
   findBoardsByName,
+  getBoardDiagram,
   getBoardScene,
   getOwnedBoard,
   queueDiagram,
@@ -252,6 +253,96 @@ const handler = createMcpHandler(
 
         return reply(
           `Queued ${ops.length} edit(s). They are applied when the board is open in the browser, so tell the user to open ${APP_URL}/workspace/${boardId}.`,
+        );
+      }
+    );
+
+    server.registerTool(
+      "get_diagram",
+      {
+        title: "Read one diagram of a board as a spec",
+        description: "Returns one diagram saved on the board the same format draw_diagram takes (nodes with ids, labels, shapes and colours; edges with labels), plus its mode and whether it can be revised. Call get_board_scene first for the diagramId. mode is null for diagrams drawn before FlowForge stored it. Diagrams still queued and not yet drawn in the browser are not included.",
+        inputSchema: z.object({
+          boardId: z.string().min(1).describe("boardId from open_board or create_board"),
+          diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
+        }),
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint:true, openWorldHint: false }
+      },
+      async ({ boardId, diagramId}, ctx) => {
+        const email = getEmail(ctx.http?.authInfo);
+        if(!email) return reply("Unauthorized", true);
+
+        const board = await getOwnedBoard(email, boardId);
+        if (!board) return reply("Board not found. Call open_board or create_board first.", true);
+
+        const diagram = await getBoardDiagram(boardId, diagramId);
+        if (!diagram) {
+          return reply(
+            "Diagram not found on the saved board. Call get_board_scene for the current diagramIds (diagrams still queued are not saved yet).",
+            true,
+          );
+        }
+
+        return reply(JSON.stringify(diagram));
+      }
+    );
+
+    server.registerTool(
+      "revise_dtagram",
+      {
+        title : "Refraw a diagram with changes",
+        description:
+          "Changes the STRUCTURE of a diagram already on the board: add, remove or reorder steps or components, add branches, add detail. Call get_board_scene for the diagramId, then get_diagram, change the spec it returns and pass the COMPLETE updated spec as `diagram` (all nodes and edges, not a patch). Keep the ids, labels and colours of nodes you don't change; give new nodes new unique ids; connect new nodes with edges. Positions are recomputed automatically, so x and y can be 0. Not available for web/mobile mockups (draw a new diagram instead). For only renaming, recolouring or deleting shapes use edit_board. The old diagram is replaced the next time the board is open in the browser, in the same place, and the diagram gets a new diagramId (call get_board_scene again before further changes).",
+        inputSchema: z.object({
+          boardId: z.string().min(1).describe("boardId from open_board or create_board"),
+          diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
+          diagram: diagramInputSchema,
+        }),
+      },
+      async ({ boardId, diagramId, diagram }, ctx) => {
+        const email = getEmail(ctx.http?.authInfo);
+        if (!email) return reply("Unauthorized", true);
+
+        const board = await getOwnedBoard(email, boardId);
+        if (!board) return reply("Board not found. Call open_board or create_board first.", true);
+
+        // The target must be saved on the board; the server (not the AI) decides the mode and whether it can be redrawn.
+        const current = await getBoardDiagram(boardId, diagramId);
+        if (!current) {
+          return reply(
+            "Diagram not found on the saved board. Call get_board_scene for the current diagramIds (diagrams still queued are not saved yet).",
+            true,
+          );
+        }
+        if (!current.revisable) {
+          return reply("Web and mobile mockups can't be revised. Draw a new mockup with draw_diagram instead.", true);
+        }
+
+        const parsed = diagramSchema.safeParse(diagram);
+        if(!parsed.success) return reply("The diagram is not valid. Check the field types and try again.", true);
+
+         // Unknown edge targets are the most common model mistake; naming them lets the AI fix and retry.
+        const ids = new Set(parsed.data.nodes.map((node) => node.id));
+        const unknown = parsed.data.edges.filter((edge) => !ids.has(edge.from) || !ids.has(edge.to));
+        if (unknown.length > 0) {
+          return reply(
+            `These edges point at ids that are not in nodes: ${unknown.map((edge) => `${edge.from}->${edge.to}`).join(", ")}. Fix them and call again.`,
+            true,
+          );
+        };
+
+        await queueDiagram(boardId, {
+          id: crypto.randomUUID(),
+          kind: "revise",
+          diagramId,
+          // Diagrams drawn before the mode was stored are laid out top-down, like a flowchart.
+          mode: current.mode ?? "flowchart",
+          spec: parsed.data,
+          createdAt: new Date().toISOString(),
+        });
+
+        return reply(
+          `Queued the updated "${parsed.data.title}" (${parsed.data.nodes.length} nodes). It replaces the old diagram when the board is open in the browser, so tell the user to open ${APP_URL}/workspace/${boardId}.`,
         );
       }
     )

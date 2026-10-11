@@ -60,3 +60,21 @@ export const reviseDiagramOnCanvas = async (
     throw error;
   }
 };
+
+// Swaps an existing diagram for `spec`, drawn where the old one was, as one undoable step. For specs that already
+// exist (queued by the MCP server), unlike reviseDiagramOnCanvas which first asks the AI for one.
+// Returns false when the diagram is no longer on the board.
+export const redrawDiagram = async (
+  api: ExcalidrawImperativeAPI,
+  diagramId: string,
+  spec: DiagramSpec,
+  mode: AiModeId,
+) => {
+  const current = await readDiagram(api, diagramId);
+  if (!current) return false;
+
+  const elements = await diagramToElements(spec, originForBackdrop(current.bounds.minX, current.bounds.minY), mode);
+  await replaceDiagram(api, diagramId, elements);
+
+  return true;
+}

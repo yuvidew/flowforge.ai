@@ -60,6 +60,16 @@ export const pendingEditSchema = z.object({
     createdAt: z.string(),
 });
 
+// A diagram redraw queued by the MCP server: the complete updated spec replaces the diagram `diagramId`.
+// `mode` is read from the saved diagram by the server, not taken from the AI.
+export const pendingReviseSchema = z.object({
+    id: z.string().min(1),
+    kind: z.literal("revise"),
+    diagramId: z.string().min(1),
+    mode: diagramModeSchema,
+    spec: diagramSchema,
+    createdAt: z.string(),
+});
 
 // Body of POST /api/whiteboard/pending: ids of the queued diagrams the browser has finished drawing.
 export const ackPendingDiagramsSchema = z.object({

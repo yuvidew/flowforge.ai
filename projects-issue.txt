@@ -56,7 +56,12 @@ Where to change
   - db/schema.ts only if the diagram spec needs to be stored
   - features/workspace pending hooks (apply edit operations in the browser)
 
-Status : Part 1 done (get_board_scene), edit tool pending
+Status : DONE
+         - get_board_scene (read the saved scene, with nodeId / diagramId / mode)
+         - edit_board (update_text, set_color, delete; queued, applied in the browser)
+         - get_diagram + revise_diagram (read one diagram as a spec, redraw it with
+           steps added or removed; the browser replaces it in place, one undo step)
+         Not done: add_node / add_edge / move / resize ops, export_board_image.
 
 
 ------------------------------------------------------------------------------
@@ -127,5 +132,59 @@ Where to change
   - features/workspace/_components/workspace-ai-floating-sidebar.tsx (tabs)
 
 Suggested branch : feat/ai-helper-edit
+
+Status : DONE, shipped as the AI chat (see ISSUE 3) instead of Create | Edit tabs.
+         The chat router decides between reply, create, edit and revise.
+         POST /api/ai/edit was removed: the chat route calls generateEditOps itself.
+
+
+------------------------------------------------------------------------------
+ISSUE 3: AI chat with saved sessions per board
+------------------------------------------------------------------------------
+Source   : Follow-up to ISSUE 2. Users wanted to keep talking to the AI about a
+           diagram (update it, ask for more detail) and see the conversation.
+
+Behaviour
+  - The AI button opens a chat (features/workspace/_components/chat/*). Each
+    message goes to POST /api/ai/chat; a router model decides:
+      reply   -> text only
+      create  -> client calls POST /api/ai/generate and draws a new diagram
+      edit    -> server returns edit ops, client applies them (applyEdits)
+      revise  -> client rebuilds the diagram's spec from the canvas and calls
+                 POST /api/ai/revise, then lays it out again (dagre) and replaces
+                 the old diagram in place (one undoable step)
+  - Optional diagram type icons under the message box are a hint for new diagrams.
+  - Sessions: tables chatSessions + chatMessages. APIs under /api/ai/chat-sessions
+    (list, rename, delete, paged messages, correct an assistant message).
+    Session name = first ~40 characters of the first message. History sent to the
+    model = last 12 messages of the session. The first message creates the session.
+  - UI: start screen, conversation (older messages load on scroll up), session
+    list, three-dots menu (rename, session list, delete with confirmation), the
+    popover only closes with X / the AI button / Escape, and the open session is
+    kept in the URL (?session=<id>) so a reload reopens it.
+  - Saving: session + turn are written in one db.batch after the model answered.
+    If the canvas step fails afterwards, the saved assistant message is rewritten.
+
+Known limits
+  - Web / mobile mockups cannot be revised (they are spatial layouts).
+  - Revise re-lays out the whole diagram: manual moves and detached arrows are lost.
+  - Hand-drawn shapes have no ids, so the AI cannot edit them.
+  - The scene sent to the router is capped at 300 FlowForge shapes.
+
+Status : DONE
+
+
+------------------------------------------------------------------------------
+ISSUE 4: More ways to change an existing diagram
+------------------------------------------------------------------------------
+Ideas, not started
+  - Edit ops: add_node, add_edge, move, resize (needs customData on arrows and
+    exporting the node builder from diagram-to-elements.ts; moving a shape does
+    not move its bound arrows with updateScene).
+  - Keep manual positions on revise (re-run the layout only for new nodes).
+  - Persist the chat outcome (applied / failed) on each message instead of
+    rewriting the text.
+  - Rate limit / cost control for the AI routes (they only check sign-in).
+  - Derive AiModeId, the zod mode enum and CHAT_MODES from one const array.
 
 Status : TODO

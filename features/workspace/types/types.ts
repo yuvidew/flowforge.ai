@@ -1,6 +1,7 @@
 import type { z } from "zod"
-import type { ackPendingDiagramsSchema, chatRequestSchema, editDiagramSchema, editOpSchema, editOpsResultSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, reviseDiagramSchema, saveWhiteboardSchema } from "../schema"
+import type { ackPendingDiagramsSchema, chatRequestSchema, editDiagramSchema, editOpSchema, editOpsResultSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, pendingReviseSchema, reviseDiagramSchema, saveWhiteboardSchema } from "../schema"
 import type { AiModeId } from "../ai/prompts"
+import { DiagramSpec } from "../ai/diagram-schema"
 
 export type TabsType = "whiteboard" | "doc"
 
@@ -31,9 +32,11 @@ export type EditOp = z.infer<typeof editOpSchema>
 // A batch of edits queued by the MCP server.
 export type PendingEdit = z.infer<typeof pendingEditSchema>
 
-// Anything the MCP server can queue: a diagram to draw or edits to apply.
-export type PendingItem = PendingDiagram | PendingEdit
+// Anything the MCP server can queue: a diagram to draw, edits to apply, or a diagram to redraw.
+export type PendingItem = PendingDiagram | PendingEdit | PendingRevise
 
+// A diagram redraw queued by the MCP server (the full updated spec for an existing diagram).
+export type PendingRevise = z.infer<typeof pendingReviseSchema>
 
 // The few fields we read from an Excalidraw element (the real element has many more).
 // Works for elements saved in the database and for live ones from the canvas.
@@ -53,6 +56,14 @@ export type SavedElement = {
   endBinding?: { elementId: string } | null;
   // Free-form in Excalidraw; summarizeScene reads nodeId / diagramId from it only when they are strings.
   customData?: Record<string, unknown>;
+    // Used to rebuild a diagram's edges, styles and labels from saved elements.
+  groupIds?: readonly string[];
+  strokeStyle?: string;
+  endArrowhead?: string | null;
+  // Text elements only: the label as typed, and its font size.
+  originalText?: string;
+  fontSize?: number;
+
 };
 
 // Input of the edit step of the chat (generateEditOps).
@@ -110,3 +121,13 @@ export type ReviseDiagramRequest = z.infer<typeof reviseDiagramSchema>;
 
 // Body of PATCH /api/ai/chat-sessions/[sessionId]/messages/[messageId], plus the ids that build its URL.
 export type UpdateChatMessageRequest = { sessionId: string; messageId: number; content: string };
+
+// One diagram found in a scene, rebuilt as the spec that draw_diagram takes. `mode` is null for diagrams drawn before
+// the mode was stored; `revisable` is false for web/mobile mockups, which can't be laid out again automatically.
+export type ReadDiagram = {
+  diagramId: string;
+  mode: AiModeId | null;
+  revisable: boolean;
+  spec: DiagramSpec;
+};
+
