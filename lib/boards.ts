@@ -3,19 +3,29 @@ import { COVER_IMAGES } from "@/features/all-files/constants";
 import type { PendingItem, SavedElement } from "@/features/workspace/types/types";
 import { and, eq, sql } from "drizzle-orm";
 import { summarizeScene } from "@/features/workspace/ai/summarize-scene";
+import { readDiagrams } from "@/features/workspace/ai/read-diagrams";
 
 
-// Reads a board's saved scene from the database and returns the compact version for the AI.
-export const getBoardScene = async (boardId: string) => {
+// The Excalidrow elements daved for a board
+const getSavedElements = async (boardId: string) => {
     const [row] = await db
         .select({ elements: whiteboardData.elements })
         .from(whiteboardData)
         .where(eq(whiteboardData.projectId, boardId))
         .limit(1);
 
-    return summarizeScene((Array.isArray(row?.elements) ? row.elements : []) as SavedElement[]);
+    return (Array.isArray(row?.elements) ? row.elements : []) as SavedElement[];
 };
 
+// Reads a board's saved scene from the database and returns the compact version for the AI.
+export const getBoardScene = async (boardId: string) => {
+    return summarizeScene(await getSavedElements(boardId))
+};
+
+// One saved diagram of a board rebuilt as a spec, or null when it isn't saved on the board (a diagram still waiting
+// in the queue isn't).
+export const getBoardDiagram = async (boardId: string, diagramId: string) =>
+    readDiagrams(await getSavedElements(boardId)).find((diagram) => diagram.diagramId === diagramId) ?? null;
 
 // Active boards of a user whose name matches exactly, ignoring case. Limit 2 is enough to tell "ambiguous" from "unique".
 export const findBoardsByName = (email: string, name: string) =>

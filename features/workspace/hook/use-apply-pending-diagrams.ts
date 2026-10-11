@@ -6,6 +6,8 @@ import { findEmptyOrigin, insertDiagram } from "../ai/scene"
 import { useAckPendingDiagrams } from "./use-ack-pending-diagrams"
 import { usePendingDiagrams } from "./use-pending-diagrams"
 import { applyEdits } from "../ai/apply-edits"
+import { redrawDiagram } from "../ai/revise-diagram"
+
 
 // Draws diagrams queued by the MCP server onto the open canvas.
 // `onDrawn` receives the ids now on the canvas; the caller sends them with the next autosave, so a diagram only
@@ -42,7 +44,14 @@ export const useApplyPendingDiagrams = (
                         else failed.push(item.id)
                         handled.current.add(item.id)
                         continue
+                    };
+                    if ("kind" in item && item.kind === "revise") {
+                        if (await redrawDiagram(excalidrawApi, item.diagramId, item.spec, item.mode)) drawn.push(item.id)
+                        else failed.push(item.id)
+                        handled.current.add(item.id)
+                        continue
                     }
+
                     const origin = await findEmptyOrigin(excalidrawApi)
                     const elements = await diagramToElements(item.spec, origin, item.mode)
                     await insertDiagram(excalidrawApi, elements)
