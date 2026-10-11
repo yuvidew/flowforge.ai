@@ -144,7 +144,7 @@ After signing in, give the AI this prompt:
 
 > On FlowForge, create a board called "Connection Test" and draw a small flowchart of a login flow.
 
-Expected: the AI calls \`create_board\`, then \`get_drawing_guide\`, then \`draw_diagram\`, and returns a workspace link. Open that link while signed in to the same account; the diagram appears within a few seconds. (It is only drawn while the board is open in the browser.)
+Expected: the AI calls \`create_board\`, then \`get_drawing_guide\`, then \`draw_diagram\`, and returns a workspace link. Open that link while signed in to the same account; the diagram is already there. (If the board was open in a browser tab, the AI answers "Queued" and the tab draws it within a few seconds.)
 
 ## Troubleshooting
 
@@ -154,7 +154,7 @@ Expected: the AI calls \`create_board\`, then \`get_drawing_guide\`, then \`draw
 | Tools list is empty or the server is missing | Start a **new** session after adding the server. In Claude Code, run \`claude mcp list\`. |
 | Browser login works but the client still says unauthorized | Run authenticate again. Make sure the URL ends with \`/api/mcp\` and has no trailing path. |
 | "No board named ..." | Boards cannot be listed. Give the exact board name, or ask the AI to create a new board. |
-| Diagram says "Queued" but nothing appears | The board must be open in a browser tab, signed in to the **same** account. Open the workspace link the AI gave. |
+| Diagram says "Queued" but nothing appears | "Queued" means a browser tab had the board open (a diagram is otherwise drawn right away, "Drew"). Keep the tab open a few seconds, signed in to the **same** account, or open the workspace link the AI gave. |
 | Signed in with a different account than expected | Boards belong to the account used at sign-in. Remove the server and add it again, or sign out of FlowForge in the browser first. |
 | Token expired | Authenticate again; clients normally refresh tokens by themselves. |
 `

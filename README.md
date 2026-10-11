@@ -9,7 +9,7 @@ FlowForge is an AI whiteboard. Describe an idea in plain words and it draws a fl
 - **Whiteboard** — themed Excalidraw canvas with autosave, custom toolbar and a floating options bar.
 - **Boards** — create, rename, pin to Favorites, archive, restore and delete; random cover images.
 - **Publishing** — share a board read-only at `/view/<boardId>`; unpublish any time.
-- **MCP server** — lets AI tools create boards and queue diagrams for you (see [Connect an AI tool via MCP](#connect-an-ai-tool-via-mcp)).
+- **MCP server** — lets AI tools create boards and draw diagrams for you, even when no browser tab is open (see [Connect an AI tool via MCP](#connect-an-ai-tool-via-mcp)).
 - **Auth** — Clerk sign-in/sign-up, with a webhook that syncs users to the database.
 
 ## Tech stack
@@ -154,7 +154,7 @@ Ask your AI, for example:
 
 > On FlowForge, create a board called "Connection Test" and draw a small flowchart of a login flow.
 
-Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`, `get_board_scene`, `get_diagram`, `edit_board`, `revise_diagram`, `publish_board`, `unpublish_board`. `get_board_scene` and `get_diagram` read a board back, `edit_board` renames, recolours or deletes shapes, and `revise_diagram` redraws a diagram with steps added or removed. Diagrams and changes are queued on the server and applied when the board is open in your browser. Boards can't be listed, so give the exact board name.
+Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`, `get_board_scene`, `get_diagram`, `edit_board`, `revise_diagram`, `publish_board`, `unpublish_board`. `get_board_scene` and `get_diagram` read a board back, `edit_board` renames, recolours or deletes shapes, and `revise_diagram` redraws a diagram with steps added or removed. Diagrams and changes are drawn and saved by the server right away when the board isn't open in a browser; if a tab has it open, they are queued and that tab applies them within seconds. Boards can't be listed, so give the exact board name.
 
 ### Server requirements (self-hosting)
 
@@ -169,6 +169,6 @@ Tools exposed: `create_board`, `open_board`, `get_drawing_guide`, `draw_diagram`
 |---|---|
 | 401 / "needs authentication" | Normal before sign-in; authenticate from your client. |
 | Server or tools missing | Start a new session after adding the server. |
-| "Queued" but nothing appears | Open the workspace link in a browser signed in to the same account. |
+| "Queued" but nothing appears | "Queued" means a tab had the board open (otherwise it answers "Drew"). Keep the tab open a few seconds, signed in to the same account. |
 | Works locally, not in ChatGPT/claude.ai | They can't reach `localhost`; use the public HTTPS URL. |
 | "No board named …" | Give the exact name, or ask the AI to create a new board. |

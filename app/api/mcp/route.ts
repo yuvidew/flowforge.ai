@@ -103,7 +103,7 @@ const handler = createMcpHandler(
       {
         title: "Read what is on a board",
         description:
-          "Returns the elements currently saved on the board (shapes with their text, arrows with the shapes they connect, positions, colours). Call open_board first for the boardId. Diagrams still queued and not yet drawn in the browser are NOT included. Shapes drawn by FlowForge carry nodeId and diagramId; older shapes have null.",
+          "Returns the elements currently saved on the board (shapes with their text, arrows with the shapes they connect, positions, colours). Call open_board first for the boardId. Diagrams that are only queued (a browser tab has the board open and has not drawn them yet) are NOT included. Shapes drawn by FlowForge carry nodeId and diagramId; older shapes have null.",
         inputSchema: z.object({ boardId: z.string().min(1).describe("boardId from open_board or create_board") }),
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       },
@@ -139,7 +139,7 @@ const handler = createMcpHandler(
       {
         title: "Draw a diagram on a board",
         description:
-          "Adds a diagram to the board. Call open_board or create_board first for the boardId, and get_drawing_guide for the mode's rules. The diagram is queued and drawn the next time the board is open in the browser.",
+          "Adds a diagram to the board. Call open_board or create_board first for the boardId, and get_drawing_guide for the mode's rules. If the board is not open in a browser the diagram is drawn and saved right away (\"Drew\"); if a tab has it open it is queued and that tab draws it within seconds (\"Queued\").",
         inputSchema: z.object({
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           mode: modeSchema,
@@ -235,7 +235,7 @@ const handler = createMcpHandler(
       {
         title: "Edit shapes already on a board",
         description:
-          "Changes shapes drawn by FlowForge without redrawing the diagram: update_text, set_color or delete. Call get_board_scene first and use the diagramId and nodeId it returns; shapes with null ids cannot be edited. Edits are queued and applied the next time the board is open in the browser.",
+          "Changes shapes drawn by FlowForge without redrawing the diagram: update_text, set_color or delete. Call get_board_scene first and use the diagramId and nodeId it returns; shapes with null ids cannot be edited. Edits are applied and saved right away when the board is not open in a browser, otherwise queued for the open tab. Errors when none of the shapes is found.",
         inputSchema: z.object({
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           ops: z.array(editOpSchema).min(1).max(50),
@@ -271,7 +271,7 @@ const handler = createMcpHandler(
       "get_diagram",
       {
         title: "Read one diagram of a board as a spec",
-        description: "Returns one diagram saved on the board the same format draw_diagram takes (nodes with ids, labels, shapes and colours; edges with labels), plus its mode and whether it can be revised. Call get_board_scene first for the diagramId. mode is null for diagrams drawn before FlowForge stored it. Diagrams still queued and not yet drawn in the browser are not included.",
+        description: "Returns one diagram saved on the board the same format draw_diagram takes (nodes with ids, labels, shapes and colours; edges with labels), plus its mode and whether it can be revised. Call get_board_scene first for the diagramId. mode is null for diagrams drawn before FlowForge stored it. Diagrams that are only queued (not yet drawn by an open browser tab) are not included.",
         inputSchema: z.object({
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
@@ -302,7 +302,7 @@ const handler = createMcpHandler(
       {
         title: "Refraw a diagram with changes",
         description:
-          "Changes the STRUCTURE of a diagram already on the board: add, remove or reorder steps or components, add branches, add detail. Call get_board_scene for the diagramId, then get_diagram, change the spec it returns and pass the COMPLETE updated spec as `diagram` (all nodes and edges, not a patch). Keep the ids, labels and colours of nodes you don't change; give new nodes new unique ids; connect new nodes with edges. Positions are recomputed automatically, so x and y can be 0. Not available for web/mobile mockups (draw a new diagram instead). For only renaming, recolouring or deleting shapes use edit_board. The old diagram is replaced the next time the board is open in the browser, in the same place, and the diagram gets a new diagramId (call get_board_scene again before further changes).",
+          "Changes the STRUCTURE of a diagram already on the board: add, remove or reorder steps or components, add branches, add detail. Call get_board_scene for the diagramId, then get_diagram, change the spec it returns and pass the COMPLETE updated spec as `diagram` (all nodes and edges, not a patch). Keep the ids, labels and colours of nodes you don't change; give new nodes new unique ids; connect new nodes with edges. Positions are recomputed automatically, so x and y can be 0. Not available for web/mobile mockups (draw a new diagram instead). For only renaming, recolouring or deleting shapes use edit_board. The old diagram is replaced in the same place right away when the board is not open in a browser, otherwise when the open tab applies the queued change, and the diagram gets a new diagramId (call get_board_scene again before further changes).",
         inputSchema: z.object({
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
