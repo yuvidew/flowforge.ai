@@ -3,6 +3,11 @@ import { SavedElement } from "../types/types";
 // Max elements sent to an AI; a bigger board is cut off so the request/reply stays small.
 const MAX_SCENE_ELEMENTS = 300;
 
+// customData is free-form, so a key is read only when its value really is a string.
+const readCustomString = (element: SavedElement, key: string) => {
+    const value = element.customData?.[key];
+    return typeof value === "string" ? value : null;
+};
 
 
 // Turns Excalidraw elements into a compact scene for an AI: no deleted elements, and the text inside a shape or
@@ -23,8 +28,9 @@ export const summarizeScene = (saved: readonly SavedElement[]) => {
         .filter((element) => !(element.type === "text" && element.containerId))
         .map((element) => ({
             id: element.id,
-            nodeId: element.customData?.nodeId ?? null,
-            diagramId: element.customData?.diagramId ?? null,
+            nodeId: readCustomString(element, "nodeId"),
+            diagramId: readCustomString(element, "diagramId"),
+            mode: readCustomString(element, "mode"),
             type: element.type,
             x: Math.round(element.x),
             y: Math.round(element.y),

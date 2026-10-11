@@ -351,7 +351,7 @@ export const WorkspaceWhiteboard = () => {
         })}
       </div>
 
-      <WorkspaceAiFloatingSidebar excalidrawApi={excalidrawApi} />
+      <WorkspaceAiFloatingSidebar excalidrawApi={excalidrawApi} projectId={projectId} />
     </div>
   );
 };

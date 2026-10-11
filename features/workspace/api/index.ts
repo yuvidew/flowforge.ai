@@ -1,6 +1,6 @@
 import { api } from "@/lib/axios"
 import type { Project } from "@/features/all-files/types"
-import type { AckPendingDiagramsRequest, GenerateDiagramRequest, PendingDiagramsResponse, PublicWhiteboardResponse, SaveWhiteboardRequest, WhiteboardResponse } from "../types/types"
+import type { AckPendingDiagramsRequest, ChatMessagesPage, ChatResponse, ChatSessionItem, GenerateDiagramRequest, PendingDiagramsResponse, PublicWhiteboardResponse, RenameChatSessionRequest, ReviseDiagramRequest, SaveWhiteboardRequest, SendChatMessageRequest, UpdateChatMessageRequest, WhiteboardResponse } from "../types/types"
 import type { DiagramSpec } from "../ai/diagram-schema"
 
 // Fetches the saved whiteboard for a project.
@@ -45,3 +45,44 @@ export const ackPendingDiagrams = async (values: AckPendingDiagramsRequest) => {
     return data
 }
 
+// Sends one chat turn; the server decides whether to reply, draw a new diagram or edit existing shapes, and saves the turn.
+export const sendChatMessage = async (values: SendChatMessageRequest) => {
+    const { data } = await api.post<ChatResponse>("/ai/chat", values, { timeout: 120_000 })
+    return data
+}
+
+// Lists the signed-in user's chat sessions on a board, newest activity first.
+export const getChatSessions = async (projectId: string) => {
+    const { data } = await api.get<{ sessions: ChatSessionItem[] }>("/ai/chat-sessions", { params: { projectId } })
+    return data
+}
+
+// Fetches one page of a session's messages (oldest first); `before` is the id of the oldest message already loaded.
+export const getChatMessages = async ({ sessionId, before }: { sessionId: string; before?: number }) => {
+    const { data } = await api.get<ChatMessagesPage>(`/ai/chat-sessions/${sessionId}/messages`, { params: { before } })
+    return data
+}
+
+// Renames a chat session.
+export const renameChatSession = async ({ sessionId, name }: RenameChatSessionRequest) => {
+    const { data } = await api.patch<ChatSessionItem>(`/ai/chat-sessions/${sessionId}`, { name })
+    return data
+}
+
+// Deletes a chat session together with its messages.
+export const deleteChatSession = async (sessionId: string) => {
+    const { data } = await api.delete<{ success: boolean }>(`/ai/chat-sessions/${sessionId}`)
+    return data
+}
+
+// Asks the server for the complete updated spec of an existing diagram after a requested change (steps added, removed, ...).
+export const reviseDiagram = async (values: ReviseDiagramRequest) => {
+    const { data } = await api.post<DiagramSpec>("/ai/revise", values, { timeout: 120_000 })
+    return data
+}
+
+// Rewrites the text of a saved assistant message (used when the canvas step failed after the reply was saved).
+export const updateChatMessage = async ({ sessionId, messageId, content }: UpdateChatMessageRequest) => {
+    const { data } = await api.patch<{ success: boolean }>(`/ai/chat-sessions/${sessionId}/messages/${messageId}`, { content })
+    return data
+}

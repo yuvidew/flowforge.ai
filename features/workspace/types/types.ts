@@ -1,5 +1,6 @@
 import type { z } from "zod"
-import type { ackPendingDiagramsSchema, editOpSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, saveWhiteboardSchema } from "../schema"
+import type { ackPendingDiagramsSchema, chatRequestSchema, editDiagramSchema, editOpSchema, editOpsResultSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, reviseDiagramSchema, saveWhiteboardSchema } from "../schema"
+import type { AiModeId } from "../ai/prompts"
 
 export type TabsType = "whiteboard" | "doc"
 
@@ -50,6 +51,62 @@ export type SavedElement = {
   isDeleted?: boolean;
   startBinding?: { elementId: string } | null;
   endBinding?: { elementId: string } | null;
-  customData?: { nodeId?: string; diagramId?: string };
+  // Free-form in Excalidraw; summarizeScene reads nodeId / diagramId from it only when they are strings.
+  customData?: Record<string, unknown>;
 };
 
+// Input of the edit step of the chat (generateEditOps).
+export type EditDiagramRequest = z.infer<typeof editDiagramSchema>;
+
+// Edit operations returned by the edit step of the chat (empty when the AI found nothing it can change).
+export type EditDiagramResponse = z.infer<typeof editOpsResultSchema>;
+
+// Body sent to POST /api/ai/chat
+export type ChatRequest = z.infer<typeof chatRequestSchema>;
+
+// What the chat route answers: a plain reply, a diagram for the client to generate, or edits for it to apply.
+
+export type ChatResult = 
+    | { action: "reply"; message: string }
+    | { action: "create"; mode: AiModeId; prompt: string; message: string }
+    | { action: "edit"; ops: EditOp[]; message: string }
+    | { action: "revise"; diagramId: string; instruction: string; message: string }
+
+// What POST /api/ai/chat returns: the decision plus the session the turn was saved in (new or existing).
+// `assistantMessageId` identifies the saved reply, which the client rewrites if the canvas step then fails.
+export type ChatResponse = ChatResult & { sessionId: string; sessionName: string; assistantMessageId: number };
+
+
+// One row of the session list as the client receives it (dates arrive as ISO strings over JSON).
+export type ChatSessionItem = {
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+// A chat message as stored in the database; the numeric id is also the pagination cursor.
+export type StoredChatMessage = {
+    id: number;
+    role: "user" | "assistant";
+    content: string;
+    createdAt: string;
+};
+
+// One page of a session's messages, oldest first; hasMore says whether older ones exist.
+export type ChatMessagesPage = {
+    messages: StoredChatMessage[];
+    hasMore: boolean;
+};
+
+// Body of a chat turn: the server's ChatRequest plus the optional creation mode picked in the composer.
+export type SendChatMessageRequest = ChatRequest & { mode?: AiModeId };
+
+// Body of PATCH /api/ai/chat-sessions/[sessionId].
+export type RenameChatSessionRequest = { sessionId: string; name: string };
+
+// Body sent to POST /api/ai/revise.
+export type ReviseDiagramRequest = z.infer<typeof reviseDiagramSchema>;
+
+// Body of PATCH /api/ai/chat-sessions/[sessionId]/messages/[messageId], plus the ids that build its URL.
+export type UpdateChatMessageRequest = { sessionId: string; messageId: number; content: string };
