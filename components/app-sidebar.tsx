@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   ArchiveIcon,
   FilesIcon,
+  PinIcon,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -24,6 +25,7 @@ import { Logo } from "./logo"
 // Top-level routes served under the (root) layout.
 const navMain = [
   { title: "All Files", url: "/all-files", icon: <FilesIcon className="size-5" /> },
+  { title: "Favorites", url: "/favorites", icon: <PinIcon className="size-5" /> },
   { title: "Archived", url: "/archived", icon: <ArchiveIcon className="size-5" /> },
 ]
 

@@ -7,7 +7,7 @@ FlowForge is an AI whiteboard. Describe an idea in plain words and it draws a fl
 - **AI diagram generation** — five modes: `diagram`, `flowchart`, `architecture`, `web`, `mobile`. Flowcharts, diagrams and architecture use automatic layout (dagre); wireframes use explicit coordinates.
 - **AI chat** — the AI button on a board opens a chat. Ask a question, draw a new diagram (optionally pick the diagram type with the icons under the message box), edit shapes already on the board (rename, recolour, delete) or change a diagram's structure ("add token generation steps after *Generate token*"). Conversations are saved as sessions per board, listed from the chat menu, and the open session is kept in the URL (`?session=<id>`), so a reload reopens it.
 - **Whiteboard** — themed Excalidraw canvas with autosave, custom toolbar and a floating options bar.
-- **Boards** — create, rename, archive, restore and delete; random cover images.
+- **Boards** — create, rename, pin to Favorites, archive, restore and delete; random cover images.
 - **Publishing** — share a board read-only at `/view/<boardId>`; unpublish any time.
 - **MCP server** — lets AI tools create boards and queue diagrams for you (see [Connect an AI tool via MCP](#connect-an-ai-tool-via-mcp)).
 - **Auth** — Clerk sign-in/sign-up, with a webhook that syncs users to the database.
@@ -77,7 +77,7 @@ Open http://localhost:3000. Optional, for Inngest functions: `npm run inngest:de
 ```
 app/
   (auth)/          sign-in, sign-up
-  (root)/          dashboard shell: all-files, archived
+  (root)/          dashboard shell: all-files, favorites, archived
   (whiteboard)/    workspace/[id] — the editor
   view/[id]/       public read-only board
   api/             route handlers: projects, whiteboard, ai, mcp, webhooks, inngest

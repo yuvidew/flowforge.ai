@@ -15,9 +15,9 @@ export const createProject = async (values: CreateProjectRequest) => {
 }
 
 // Fetches a page of the signed-in user's boards (active or archived), optionally filtered by name.
-export const getProjects = async ({ archived, search, page }: GetProjectsParams) => {
+export const getProjects = async ({ archived, pinned, search, page }: GetProjectsParams) => {
     const { data } = await api.get<ProjectsResponse>("/projects", {
-        params: { archived, search, page, pageSize: PROJECTS_PAGE_SIZE },
+        params: { archived, pinned: pinned ? true : undefined, search, page, pageSize: PROJECTS_PAGE_SIZE },
     })
     return data
 }

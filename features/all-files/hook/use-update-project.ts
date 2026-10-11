@@ -14,13 +14,17 @@ export const useUpdateProject = () => {
         mutationKey: ["update-project"],
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: [PROJECTS_QUERY_KEY] })
-            // isArchived is only sent by archive/unarchive; a rename leaves it undefined.
+            // isArchived / isPinned are only sent by archive and pin actions; a rename leaves them undefined.
             const title =
                 variables.isArchived === true
                     ? "Board archived"
                     : variables.isArchived === false
                       ? "Board unarchived"
-                      : "Board updated"
+                      : variables.isPinned === true
+                        ? "Board pinned"
+                        : variables.isPinned === false
+                          ? "Board unpinned"
+                          : "Board updated"
             toast.add({ title, type: "success" })
         },
         onError: (error) => {

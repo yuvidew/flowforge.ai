@@ -3,7 +3,16 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ArchiveIcon, ArchiveRestoreIcon, GlobeIcon, MoreVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import {
+    ArchiveIcon,
+    ArchiveRestoreIcon,
+    GlobeIcon,
+    MoreVerticalIcon,
+    PencilIcon,
+    PinIcon,
+    PinOffIcon,
+    Trash2Icon,
+} from "lucide-react"
 
 import {
     AlertDialog,
@@ -32,9 +41,9 @@ import { RenameBoardDialog } from "./rename-board-dialog"
 
 /**
  * @component BoardCard
- * @description Shared grid card for a board: cover image with the name and created date pinned to the bottom-left and a "more" menu pinned to the bottom-right on the same row, both absolutely positioned over the image. Published boards show a globe badge at the top-left of the cover. Used by the All Files and Archived pages.
+ * @description Shared grid card for a board: cover image with the name and created date pinned to the bottom-left and a "more" menu pinned to the bottom-right on the same row, both absolutely positioned over the image. Published boards show a globe badge at the top-left of the cover and pinned boards a pin badge at the top-right. Used by the All Files, Favorites and Archived pages.
  * @param project - The board row to render.
- * @param variant - "active" menu: edit name, archive, delete. "archived" menu: unarchive, delete.
+ * @param variant - "active" menu: edit name, pin/unpin, archive, delete. "archived" menu: unarchive, delete.
  */
 export const BoardCard = ({
     project,
@@ -81,6 +90,15 @@ export const BoardCard = ({
                             <GlobeIcon className="size-4" />
                         </span>
                     )}
+                    {project.isPinned && (
+                        <span
+                            title="Pinned"
+                            aria-label="Pinned"
+                            className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"
+                        >
+                            <PinIcon className="size-4" />
+                        </span>
+                    )}
                     <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent p-3 pt-10 pr-14 text-white">
                         <p className="truncate text-sm font-medium">{project.projectName}</p>
                         <p className="text-xs text-white/80">Created {createdOn}</p>
@@ -108,6 +126,12 @@ export const BoardCard = ({
                             <DropdownMenuItem onClick={() => setRenameOpen(true)}>
                                 <PencilIcon className="size-4" />
                                 Edit name
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => update.mutate({ projectId: project.projectId, isPinned: !project.isPinned })}
+                            >
+                                {project.isPinned ? <PinOffIcon className="size-4" /> : <PinIcon className="size-4" />}
+                                {project.isPinned ? "Unpin" : "Pin"}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() => update.mutate({ projectId: project.projectId, isArchived: true })}

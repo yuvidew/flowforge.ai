@@ -63,7 +63,7 @@ Other features
 ==============================================================================
 
 Board        One whiteboard. Has a name, an owner (by email), a cover, and flags
-             isArchived and isPublished.
+             isArchived, isPinned and isPublished.
 
 Diagram      A small JSON description: a title, nodes (shapes with text, size,
              colour), edges (arrows between nodes) and optional free text.
@@ -94,7 +94,8 @@ showing?" cause (see section 15).
   Open the site and sign up / sign in (Clerk).
 
 3.2 Dashboard
-  - "All Files": your active boards, searchable and paginated.
+  - "All Files": your active boards, searchable and paginated. Pinned boards come first.
+  - "Favorites": boards you pinned (pin or unpin from a card's menu). Archiving a board unpins it.
   - "Archived": boards you archived. Restore or delete them for good.
   - "New board" button in the sidebar creates a board and opens it.
   - Board card menu: rename, archive, delete.
@@ -545,7 +546,7 @@ users
 
 projects  (a "board")
   id, projectId (uuid string, unique), projectName, userEmail,
-  coverImage (file in public/cover), isArchived (default false),
+  coverImage (file in public/cover), isArchived (default false), isPinned (default false),
   isPublished (default false), created_at
 
 whiteboardData
@@ -611,7 +612,7 @@ found, 500 unexpected.
 
 Pages
   /sign-in, /sign-up          Clerk
-  /all-files, /archived       Dashboard (with sidebar)
+  /all-files, /favorites, /archived   Dashboard (with sidebar)
   /workspace/[id]             Board editor
   /view/[id]                  Public read-only board
 

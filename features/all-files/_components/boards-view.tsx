@@ -15,12 +15,13 @@ import { useDebouncedSearch, useProjectsFilters } from "../hook/use-projects-fil
 
 /**
  * @component BoardsList
- * @description Responsive grid of the signed-in user's boards, shared by All Files (`archived={false}`) and Archived (`archived`). Renders loading → error → empty → data.
+ * @description Responsive grid of the signed-in user's boards, shared by All Files (`archived={false}`), Favorites (`pinned`) and Archived (`archived`). Renders loading → error → empty → data.
  * @param archived - Which set of boards to show.
+ * @param pinned - Only show pinned boards (the Favorites page).
  */
-export const BoardsList = ({ archived }: { archived: boolean }) => {
+export const BoardsList = ({ archived, pinned = false }: { archived: boolean; pinned?: boolean }) => {
     const { search, page } = useProjectsFilters()
-    const { data, isPending, isError } = useGetProjects({ archived, search, page })
+    const { data, isPending, isError } = useGetProjects({ archived, pinned, search, page })
 
     // Opens the shared new-board dialog from the empty state's create button.
     const onOpen = useNewBoardState((state) => state.onOpen)
@@ -31,6 +32,8 @@ export const BoardsList = ({ archived }: { archived: boolean }) => {
     // Distinguishes "nothing matches your search" from "you have no boards at all".
     const emptyView = search ? (
         <EntityEmptyView empty_label="No results" message={`No boards match “${search}”.`} />
+    ) : pinned ? (
+        <EntityEmptyView empty_label="No favorites yet" message="Pin a board to see it here." />
     ) : archived ? (
         <EntityEmptyView empty_label="No archived boards" message="Boards you archive will show up here." />
     ) : (
@@ -59,8 +62,9 @@ export const BoardsList = ({ archived }: { archived: boolean }) => {
  * @component BoardsSearch
  * @description Debounced name search for the boards list; the value is stored in the URL (`?q=`).
  * @param archived - Used in the placeholder text only.
+ * @param pinned - Used in the placeholder text only.
  */
-export const BoardsSearch = ({ archived }: { archived: boolean }) => {
+export const BoardsSearch = ({ archived, pinned = false }: { archived: boolean; pinned?: boolean }) => {
     const { search, setSearch } = useProjectsFilters()
     const [input, setInput] = useDebouncedSearch(search, setSearch)
 
@@ -68,7 +72,7 @@ export const BoardsSearch = ({ archived }: { archived: boolean }) => {
         <EntitySearch
             value={input}
             onChange={setInput}
-            placeholder={archived ? "Search archived boards" : "Search boards"}
+            placeholder={pinned ? "Search favorites" : archived ? "Search archived boards" : "Search boards"}
         />
     )
 }
@@ -77,10 +81,11 @@ export const BoardsSearch = ({ archived }: { archived: boolean }) => {
  * @component BoardsPagination
  * @description Previous/next controls bound to the boards query and the URL (`?page=`). Steps back a page if the current one empties (e.g. last card archived or deleted).
  * @param archived - Which set of boards the pagination belongs to.
+ * @param pinned - Paginate the favorites set instead.
  */
-export const BoardsPagination = ({ archived }: { archived: boolean }) => {
+export const BoardsPagination = ({ archived, pinned = false }: { archived: boolean; pinned?: boolean }) => {
     const { search, page, setPage } = useProjectsFilters()
-    const { data, isFetching } = useGetProjects({ archived, search, page })
+    const { data, isFetching } = useGetProjects({ archived, pinned, search, page })
 
     const totalPages = data?.totalPages ?? 0
 
