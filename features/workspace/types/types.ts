@@ -8,11 +8,11 @@ export type TabsType = "whiteboard" | "doc"
 // Body sent to POST /api/whiteboard.
 export type SaveWhiteboardRequest = z.infer<typeof saveWhiteboardSchema>
 
-// Saved whiteboard as returned by GET /api/whiteboard.
-export type WhiteboardResponse = Omit<SaveWhiteboardRequest, "projectId" | "ackPendingIds">
+export type WhiteboardResponse = Omit<SaveWhiteboardRequest, "projectId" | "ackPendingIds" | "baseVersion"> & { version: number }
 
-// Published board as returned by GET /api/public/whiteboard.
-export type PublicWhiteboardResponse = WhiteboardResponse & { projectName: string }
+// Published board as returned by GET /api/public/whiteboard (public pages don't use versions).
+export type PublicWhiteboardResponse = Omit<WhiteboardResponse, "version"> & { projectName: string }
+
 
 // Body sent to POST /api/ai/generate.
 export type GenerateDiagramRequest = z.infer<typeof generateDiagramSchema>
@@ -130,4 +130,19 @@ export type ReadDiagram = {
   revisable: boolean;
   spec: DiagramSpec;
 };
+
+export type WriteSceneInput = {
+  projectId: string;
+  elements: unknown[];
+  // Omitted by server writers: the stored appState / files are left untouched.
+  appState?: Record<string, unknown>;
+  files?: Record<string, unknown>;
+  // Version the writer's scene was based on; omitted = unconditional write.
+  baseVersion?: number;
+  ackPendingIds?: string[];
+};
+
+export type WriteSceneResult = { ok: true; version: number } | { ok: false; serverVersion: number };
+
+
 

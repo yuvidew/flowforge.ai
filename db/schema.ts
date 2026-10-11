@@ -35,8 +35,11 @@ export const whiteboardData = pgTable("whiteboardData", {
   files: jsonb("files"),
   // Diagram specs queued by the MCP server; the open workspace converts them to Excalidraw elements and clears them.
   pendingDiagrams: jsonb("pendingDiagrams"),
+  // Bumped by every scene write; a writer holding an older version is rejected so nobody overwrites newer work.
+  version: integer("version").notNull().default(0),
+  // Last poll from an open workspace tab; MCP draws on the server only when this is stale.
+  lastSeenAt: timestamp("last_seen_at"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-
 });
 
 // One AI chat conversation on a board; a board can have many. Deleted together with the board's messages.

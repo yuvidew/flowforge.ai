@@ -35,11 +35,16 @@ export const GET = async (req: NextRequest) => {
             return NextResponse.json({ error: "Project not found" }, { status: 404 });
         }
 
+        // The open workspace polls this every few seconds, so it doubles as the "a tab is open" heartbeat that MCP
+        // routing reads. One upsert also covers a brand-new board that has no row yet (the old select crashed on it).
         const [row] = await db
-            .select({ pending: whiteboardData.pendingDiagrams})
-            .from(whiteboardData)
-            .where(eq(whiteboardData.projectId, projectId))
-            .limit(1);
+            .insert(whiteboardData)
+            .values({ projectId, lastSeenAt: new Date() })
+            .onConflictDoUpdate({ target: whiteboardData.projectId, set: { lastSeenAt: new Date() } })
+            .returning({ pending: whiteboardData.pendingDiagrams });
+
+        return NextResponse.json({ pending: row?.pending ?? [] })
+
 
         return NextResponse.json({ pending: row.pending ?? [] })
     } catch (error) {
@@ -68,7 +73,7 @@ export const POST = async (req: NextRequest) => {
             );
         }
 
-        const {projectId, ids} = parsed.data;
+        const { projectId, ids } = parsed.data;
 
         if (!(await getOwnedProject(projectId, email))) {
             return NextResponse.json({ error: "Project not found" }, { status: 404 });

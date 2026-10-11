@@ -11,7 +11,7 @@ export const getWhiteboard = async (projectId: string) => {
 
 // Saves (upserts) the whiteboard for a project.
 export const saveWhiteboard = async (values: SaveWhiteboardRequest) => {
-    const { data } = await api.post<{ success: boolean }>("/whiteboard", values)
+    const { data } = await api.post<{ success: boolean, version: number }>("/whiteboard", values)
     return data
 }
 

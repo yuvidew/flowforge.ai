@@ -28,6 +28,9 @@ import { cn } from "@/lib/utils";
 import { FloatingBox, type ElementPatch } from "./workspace-floating-box";
 import { WorkspaceAiFloatingSidebar } from "./workspace-ai-floating-sidebar";
 import { isLoadingElement } from "../ai/loading-card";
+import { isAxiosError } from "axios";
+import { getWhiteboard } from "../api";
+
 
 const Excalidraw = dynamic(
   async () => (await import("@excalidraw/excalidraw")).Excalidraw,
@@ -115,6 +118,27 @@ export const WorkspaceWhiteboard = () => {
   // Signature of the last saved/loaded scene; null until the board has loaded.
   const lastSignature = useRef<string | null>(null);
 
+  // Server version of the scene this tab last loaded or saved; sent with every save so a stale tab is detected.
+  const versionRef = useRef<number | null>(null);
+  if (data && versionRef.current === null) versionRef.current = data.version;
+
+  // Pulls the newer saved scene (e.g. a diagram the MCP server drew while this tab was idle) into the canvas.
+  const mergeRemoteScene = async () => {
+    if (!excalidrawApi) return;
+    const [remote, { reconcileElements, CaptureUpdateAction }] = await Promise.all([
+      getWhiteboard(projectId),
+      import("@excalidraw/excalidraw"),
+    ]);
+    versionRef.current = remote.version;
+    // Forces the next onChange to autosave the merged scene on top of the new version.
+    lastSignature.current = "";
+    excalidrawApi.updateScene({
+      elements: reconcileElements(excalidrawApi.getSceneElements() as never, remote.elements as never, excalidrawApi.getAppState()),
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  };
+
+
   useEffect(() => {
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
@@ -160,7 +184,7 @@ export const WorkspaceWhiteboard = () => {
 
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
 
-        saveTimeout.current = setTimeout(() => {
+    saveTimeout.current = setTimeout(() => {
       lastSignature.current = signature;
 
       // Snapshot of the ids to clear with this save; they stay in the ref until the save is confirmed.
@@ -172,12 +196,17 @@ export const WorkspaceWhiteboard = () => {
         appState: pickSavedAppState(appState),
         files,
         ackPendingIds: sentIds.length > 0 ? sentIds : undefined,
+        baseVersion: versionRef.current ?? undefined,
       })
-        .then(() => {
+        .then(({ version }) => {
+          versionRef.current = version;
           ackIds.current = ackIds.current.filter((id) => !sentIds.includes(id));
         })
-        // The hook already shows the error toast; the ids stay queued and go out with the next save.
-        .catch(() => {});
+        .catch((error) => {
+          // 409: the board changed elsewhere; merge it in, which triggers a fresh autosave. Other errors already toasted.
+          if (isAxiosError(error) && error.response?.status === 409) void mergeRemoteScene();
+        });
+
     }, SAVE_DEBOUNCE_MS);
 
   };
