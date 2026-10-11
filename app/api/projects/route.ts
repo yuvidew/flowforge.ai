@@ -63,7 +63,7 @@ export const GET = async (req: NextRequest) => {
             );
         }
 
-        const { archived, search, page, pageSize } = parsed.data;
+        const { archived, pinned, search, page, pageSize } = parsed.data;
 
         // Escape LIKE wildcards so a typed "%" or "_" is matched literally.
         const escaped = search.replace(/[\\%_]/g, "\\$&");
@@ -71,6 +71,7 @@ export const GET = async (req: NextRequest) => {
         const where = and(
             eq(projects.userEmail, email),
             eq(projects.isArchived, archived === "true"),
+            pinned === "true" ? eq(projects.isPinned, true) : undefined,
             search ? ilike(projects.projectName, `%${escaped}%`) : undefined
         );
 
@@ -79,7 +80,8 @@ export const GET = async (req: NextRequest) => {
                 .select()
                 .from(projects)
                 .where(where)
-                .orderBy(desc(projects.createdAt))
+                // Pinned boards stay first on every page; the rest are newest first.
+                .orderBy(desc(projects.isPinned), desc(projects.createdAt))
                 .limit(pageSize)
                 .offset((page - 1) * pageSize),
             db.select({ total: count() }).from(projects).where(where),

@@ -38,3 +38,6 @@ issue-img
 # local AI test requests
 test-queries.json
 .env*
+
+# local planning notes
+plan.txt

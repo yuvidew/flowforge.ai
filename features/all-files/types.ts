@@ -17,7 +17,7 @@ export type ProjectsResponse = {
 }
 
 // Filters for GET /api/projects.
-export type GetProjectsParams = { archived: boolean; search: string; page: number }
+export type GetProjectsParams = { archived: boolean; pinned?: boolean; search: string; page: number }
 
 // Variables for updating a board (rename and/or archive).
 export type UpdateProjectRequest = UpdateProjectValues & { projectId: string }

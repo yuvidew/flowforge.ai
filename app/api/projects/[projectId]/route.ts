@@ -60,6 +60,9 @@ export const PATCH = async (req: NextRequest, { params }: RouteContext) => {
         const changes: Partial<typeof projects.$inferInsert> = {};
         if (parsed.data.name !== undefined) changes.projectName = parsed.data.name;
         if (parsed.data.isArchived !== undefined) changes.isArchived = parsed.data.isArchived;
+        if (parsed.data.isPinned !== undefined) changes.isPinned = parsed.data.isPinned;
+        // Archived boards are never favorites; this also wins over a pin sent in the same request.
+        if (parsed.data.isArchived === true) changes.isPinned = false;
         if (parsed.data.isPublished !== undefined) changes.isPublished = parsed.data.isPublished;
 
         const [row] = await db

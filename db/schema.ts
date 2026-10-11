@@ -20,6 +20,8 @@ export const projects = pgTable("projects", {
   coverImage: varchar("coverImage"),
   // Archived boards are hidden from the all-files grid but kept in the DB.
   isArchived: boolean("isArchived").notNull().default(false),
+  // Pinned boards are listed first in All Files and on the Favorites page; archiving a board unpins it.
+  isPinned: boolean("isPinned").notNull().default(false),
   // When true, anyone with the link can view the board read-only at /view/[projectId].
   isPublished: boolean("isPublished").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
