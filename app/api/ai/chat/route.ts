@@ -1,7 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NoObjectGeneratedError } from "ai";
 import { NextRequest, NextResponse } from "next/server";
-import { getChatSystemPrompt, getChatUserPrompt, indexDiagrams } from "@/features/workspace/ai/prompts";
+import { getChatSystemPrompt, getChatUserPrompt, indexDiagrams, leaksSystemPrompt, PROMPT_LEAK_REPLY } from "@/features/workspace/ai/prompts";
 import { chatActionSchema, chatRequestSchema } from "@/features/workspace/schema";
 import type { ChatResponse, ChatResult } from "@/features/workspace/types/types";
 import { generateEditOps } from "@/lib/ai-edit";
@@ -99,6 +99,11 @@ export const POST = async (req: NextRequest) => {
         } else {
             // reply and create already have the shape the client needs.
             result = decision;
+        }
+
+        // Backstop for the prompt's confidentiality rule: never show or store a message that quotes the system prompt.
+        if (leaksSystemPrompt(result.message)) {
+            result = { action: "reply", message: PROMPT_LEAK_REPLY };
         }
 
         // Saved only after the model succeeded, and in one batch (see saveChatTurn), so a failed turn leaves no
