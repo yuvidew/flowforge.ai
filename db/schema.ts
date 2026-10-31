@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, varchar, jsonb, boolean, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, varchar, jsonb, boolean, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 
 export const users = pgTable("users", {
@@ -41,6 +41,18 @@ export const whiteboardData = pgTable("whiteboardData", {
   lastSeenAt: timestamp("last_seen_at"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// People the owner invited to edit a board live. Matched by (lower-cased) Clerk email, same key as projects.userEmail.
+export const boardCollaborators = pgTable("boardCollaborators", {
+  id: serial("id").primaryKey(),
+  projectId: varchar("projectId").notNull().references(() => projects.projectId, { onDelete: "cascade" }),
+  // Always stored lower-cased so lookups are case-insensitive.
+  email: varchar("email").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("board_collaborators_project_email_idx").on(table.projectId, table.email),
+  index("board_collaborators_email_idx").on(table.email),
+]);
 
 // One AI chat conversation on a board; a board can have many. Deleted together with the board's messages.
 export const chatSessions = pgTable("chatSessions", {

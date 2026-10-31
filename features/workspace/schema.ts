@@ -17,6 +17,15 @@ export const saveWhiteboardSchema = z.object({
     baseVersion: z.number().int().min(0).optional(),
 });
 
+// Body of POST /api/projects/[id]/collaborators: the email is trimmed and lower-cased so it matches the stored invite.
+export const addCollaboratorSchema = z.object({
+    email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address")),
+});
+
+// Body of DELETE /api/projects/[id]/collaborators.
+export const removeCollaboratorSchema = z.object({
+    email: z.string().trim().toLowerCase().min(1, "Email is required"),
+});
 
 // Body of POST /api/ai/generate: which kind of diagram to make and the user's description of it.
 export const generateDiagramSchema = z.object({
