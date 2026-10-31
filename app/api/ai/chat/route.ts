@@ -6,7 +6,7 @@ import { chatActionSchema, chatRequestSchema } from "@/features/workspace/schema
 import type { ChatResponse, ChatResult } from "@/features/workspace/types/types";
 import { generateEditOps } from "@/lib/ai-edit";
 import { generateObjectWithFallback, isBusyError, isTimeoutError } from "@/lib/ai-model";
-import { getOwnedBoard } from "@/lib/boards";
+import { getBoardAccess } from "@/lib/board-access";
 import { getOwnedSession, recentMessages, saveChatTurn } from "@/lib/chat-sessions";
 
 // An edit makes two model calls (decide, then edit); lets hosts that cap function time (e.g. Vercel) allow it.
@@ -40,7 +40,7 @@ export const POST = async (req: NextRequest) => {
 
         const { projectId, sessionId, message, scene, selected, mode } = parsed.data;
 
-        const board = await getOwnedBoard(email, projectId);
+        const board = await getBoardAccess(email, projectId);
 
         if (!board) {
             return NextResponse.json({ error: "Board not found" }, { status: 404 });

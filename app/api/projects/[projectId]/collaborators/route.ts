@@ -33,6 +33,7 @@ export const GET = async (_req: NextRequest, { params }: RouteContext) => {
         return NextResponse.json({
             owner: access.board.userEmail,
             role: access.role,
+            canManage: access.canManage,
             collaborators: rows.map((row) => row.email),
         });
     } catch (error) {
@@ -60,6 +61,11 @@ export const POST = async (req: NextRequest, { params }: RouteContext) => {
 
         if (access.role !== "owner") {
             return NextResponse.json({ error: "Only the owner can invite people" }, { status: 403 });
+        }
+
+        // Team boards are open to the whole workspace; people are managed there (Clerk), not per board.
+        if (access.board.orgId) {
+            return NextResponse.json({ error: "Team boards are shared with the whole workspace" }, { status: 400 });
         }
 
         const parsed = addCollaboratorSchema.safeParse(await req.json().catch(() => null));

@@ -152,4 +152,4 @@ export type WriteSceneResult = { ok: true; version: number } | { ok: false; serv
 export type AddCollaboratorRequest = z.infer<typeof addCollaboratorSchema>
 
 // Response of GET /api/projects/[id]/collaborators; `role` is the signed-in user's own role on the board.
-export type CollaboratorsResponse = { owner: string; role: "owner" | "collaborator"; collaborators: string[] }
+export type CollaboratorsResponse = { owner: string; role: "owner" | "collaborator"; canManage: boolean; collaborators: string[] }

@@ -25,8 +25,9 @@ export const WorkspaceHeader = () => {
     const [shareOpen, setShareOpen] = useState(false);
     // True while the whiteboard autosave mutation (see useSaveWhiteboard) is in flight.
     const isSaving = useIsMutating({ mutationKey: ["save-whiteboard"] }) > 0;
-    // Only the owner can invite or remove people; collaborators get the avatars and Save only.
-    const isOwner = access?.role === "owner";
+    // Only the owner of a personal board invites people by email; team boards are open to the whole workspace
+    // (members are managed from the workspace rail), so there is nothing to share per board.
+    const canShare = access?.role === "owner" && !!project && !project.orgId;
 
     return (
         <header className="p-3 border-b flex items-center justify-between">
@@ -46,7 +47,7 @@ export const WorkspaceHeader = () => {
                    {isSaving ? "Saving…" : "Save"}
                 </Button>
 
-                {isOwner && (
+                {canShare && (
                     <Button variant="outline" onClick={() => setShareOpen(true)}>
                         <Share2Icon />
                         Share
@@ -56,7 +57,7 @@ export const WorkspaceHeader = () => {
                 <WorkspacePresence />
             </div>
 
-            {isOwner && <WorkspaceShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} />}
+            {canShare && <WorkspaceShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} />}
         </header>
     );
 };

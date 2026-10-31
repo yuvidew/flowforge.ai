@@ -2,7 +2,7 @@ import { db, projects, whiteboardData } from "@/db";
 import { updateProjectSchema } from "@/features/all-files/schema";
 import { getBoardAccess } from "@/lib/board-access";
 import { currentUser } from "@clerk/nextjs/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = { params: Promise<{ projectId: string }> };
@@ -33,7 +33,7 @@ export const GET = async (_req: NextRequest, { params }: RouteContext) => {
     }
 };
 
-// Renames, archives and/or publishes a board owned by the signed-in user.
+// Renames, pins, archives and/or publishes a board the signed-in user may manage.
 export const PATCH = async (req: NextRequest, { params }: RouteContext) => {
     try {
         const user = await currentUser();
@@ -63,10 +63,21 @@ export const PATCH = async (req: NextRequest, { params }: RouteContext) => {
         if (parsed.data.isArchived === true) changes.isPinned = false;
         if (parsed.data.isPublished !== undefined) changes.isPublished = parsed.data.isPublished;
 
+        // Renaming, pinning, archiving and publishing need the board's creator or (on a team board) a workspace admin.
+        const access = await getBoardAccess(email, projectId);
+
+        if (!access) {
+            return NextResponse.json({ error: "Board not found" }, { status: 404 });
+        }
+
+        if (!access.canManage) {
+            return NextResponse.json({ error: "Only the board's creator or a workspace admin can change it" }, { status: 403 });
+        }
+
         const [row] = await db
             .update(projects)
             .set(changes)
-            .where(and(eq(projects.projectId, projectId), eq(projects.userEmail, email)))
+            .where(eq(projects.projectId, projectId))
             .returning();
 
         if (!row) {
@@ -92,14 +103,15 @@ export const DELETE = async (_req: NextRequest, { params }: RouteContext) => {
 
         const { projectId } = await params;
 
-        // Ownership check before touching the child table.
-        const [owned] = await db
-            .select({ id: projects.id })
-            .from(projects)
-            .where(and(eq(projects.projectId, projectId), eq(projects.userEmail, email)));
+        // Access check before touching the child table.
+        const access = await getBoardAccess(email, projectId);
 
-        if (!owned) {
+        if (!access) {
             return NextResponse.json({ error: "Board not found" }, { status: 404 });
+        }
+
+        if (!access.canManage) {
+            return NextResponse.json({ error: "Only the board's creator or a workspace admin can delete it" }, { status: 403 });
         }
 
         await db.delete(whiteboardData).where(eq(whiteboardData.projectId, projectId));

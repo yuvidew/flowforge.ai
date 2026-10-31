@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { AppSidebar } from "@/components/app-sidebar"
+import { WorkspaceRail } from "@/components/workspace-rail"
 import {
   SidebarInset,
   SidebarProvider,
@@ -34,6 +35,9 @@ const DashboardLayout = async ({
   }
 
   return (
+    // The rail is fixed at 56px; everything else (including the fixed sidebar, see AppSidebar) is pushed right by that width.
+    <div className="pl-[56px]">
+    <WorkspaceRail />
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
@@ -51,6 +55,7 @@ const DashboardLayout = async ({
         <NewBoardDialog />
       </SidebarInset>
     </SidebarProvider>
+    </div>
   )
 }
 

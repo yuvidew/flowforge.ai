@@ -1,9 +1,9 @@
-import { db, users } from "@/db";
+import { db, projects, users, whiteboardData } from "@/db";
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
-// Receives Clerk webhooks and mirrors user create/update/delete events into the Neon `users` table.
+// Receives Clerk webhooks and mirrors user create/update/delete events into the Neon `users` table and cleans up boards of deleted team workspaces.
 export const POST = async (req: NextRequest) => {
   try {
     // Verifies the Svix signature using CLERK_WEBHOOK_SIGNING_SECRET; throws if invalid.
@@ -35,6 +35,13 @@ export const POST = async (req: NextRequest) => {
           .values({ clerkId: id, name, email })
           .onConflictDoUpdate({ target: users.email, set: { clerkId: id, name } });
       }
+    }
+
+    // A deleted team workspace takes its boards with it (chat sessions and invites cascade from projects).
+    if (evt.type === "organization.deleted" && evt.data.id) {
+      const orgBoards = db.select({ projectId: projects.projectId }).from(projects).where(eq(projects.orgId, evt.data.id));
+      await db.delete(whiteboardData).where(inArray(whiteboardData.projectId, orgBoards));
+      await db.delete(projects).where(eq(projects.orgId, evt.data.id));
     }
 
     if (evt.type === "user.deleted" && evt.data.id) {
