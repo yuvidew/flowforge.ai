@@ -1,11 +1,11 @@
 import { db, projects } from "@/db";
 import { COVER_IMAGES } from "@/features/all-files/constants";
 import { newBoardSchema, projectsQuerySchema } from "@/features/all-files/schema";
-import { currentUser } from "@clerk/nextjs/server";
-import { and, count, desc, eq, ilike } from "drizzle-orm";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { and, count, desc, eq, ilike, isNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
-// Creates a board (project) owned by the signed-in user.
+// Creates a board owned by the signed-in user, inside the active team workspace when one is selected (otherwise personal).
 export const POST = async (req: NextRequest) => {
     try {
         const user = await currentUser();
@@ -26,6 +26,9 @@ export const POST = async (req: NextRequest) => {
             );
         }
 
+        // The workspace comes from the session, never from the request body, so nobody can create boards in another team.
+        const { orgId } = await auth();
+
         // Only whitelisted fields are inserted; the id is generated server-side, never taken from the client.
         const [row] = await db
             .insert(projects)
@@ -33,6 +36,7 @@ export const POST = async (req: NextRequest) => {
                 projectId: crypto.randomUUID(),
                 projectName: parsed.data.name,
                 userEmail: email,
+                orgId: orgId ?? null,
                 coverImage: COVER_IMAGES[Math.floor(Math.random() * COVER_IMAGES.length)],
             })
             .returning();
@@ -44,7 +48,7 @@ export const POST = async (req: NextRequest) => {
     }
 };
 
-// Lists a page of the signed-in user's boards (active or archived), newest first, optionally filtered by name.
+// Lists a page of the active workspace's boards (a team's boards for every member, or the user's own personal boards), newest first.
 export const GET = async (req: NextRequest) => {
     try {
         const user = await currentUser();
@@ -65,11 +69,14 @@ export const GET = async (req: NextRequest) => {
 
         const { archived, pinned, search, page, pageSize } = parsed.data;
 
+        // The active Clerk organization decides which workspace is listed; no active org means the personal workspace.
+        const { orgId } = await auth();
+
         // Escape LIKE wildcards so a typed "%" or "_" is matched literally.
         const escaped = search.replace(/[\\%_]/g, "\\$&");
 
         const where = and(
-            eq(projects.userEmail, email),
+            orgId ? eq(projects.orgId, orgId) : and(eq(projects.userEmail, email), isNull(projects.orgId)),
             eq(projects.isArchived, archived === "true"),
             pinned === "true" ? eq(projects.isPinned, true) : undefined,
             search ? ilike(projects.projectName, `%${escaped}%`) : undefined

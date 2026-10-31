@@ -24,8 +24,12 @@ export const projects = pgTable("projects", {
   isPinned: boolean("isPinned").notNull().default(false),
   // When true, anyone with the link can view the board read-only at /view/[projectId].
   isPublished: boolean("isPublished").notNull().default(false),
+  // Clerk organization (team workspace) that owns the board; null = a personal board only its owner (and invitees) can open.
+  orgId: varchar("orgId"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("projects_org_idx").on(table.orgId),
+]);
 
 export const whiteboardData = pgTable("whiteboardData", {
   id: serial("id").primaryKey(),
