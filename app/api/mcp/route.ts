@@ -7,6 +7,7 @@ import { diagramInputSchema } from "@/features/workspace/ai/mcp-diagram-input";
 import { getSystemPrompt } from "@/features/workspace/ai/prompts";
 import { verifyClerkToken } from "@clerk/mcp-tools/next";
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { resolveAgentName } from "@/lib/ai-live";
 import { submitToBoard } from "@/lib/server-draw";
 
 import {
@@ -53,8 +54,19 @@ const getEmail = (authInfo?: AuthInfo) => {
   return typeof email === "string" ? email : null;
 };
 
+// Name the AI tool tells us it is (e.g. "Cursor"); shown on its live cursor so people see who is drawing.
+const agentNameSchema = z
+  .string()
+  .trim()
+  .max(40)
+  .optional()
+  .describe("Your product name as the user knows it, e.g. \"Claude Code\", \"Cursor\", \"ChatGPT\". Shown on your live cursor while you draw.");
+
 const handler = createMcpHandler(
   (server) => {
+    // The connecting MCP client's own name, when the transport kept it from the initialize call.
+    const getClientName = () => server.server.getClientVersion?.()?.name ?? null;
+
     server.registerTool(
       "open_board",
       {
@@ -139,14 +151,15 @@ const handler = createMcpHandler(
       {
         title: "Draw a diagram on a board",
         description:
-          "Adds a diagram to the board. Call open_board or create_board first for the boardId, and get_drawing_guide for the mode's rules. If the board is not open in a browser the diagram is drawn and saved right away (\"Drew\"); if a tab has it open it is queued and that tab draws it within seconds (\"Queued\").",
+          "Adds a diagram to the board. Call open_board or create_board first for the boardId, and get_drawing_guide for the mode's rules. Pass agentName (your product name). The diagram is drawn and saved right away (\"Drew\"); anyone with the board open watches it appear live with your named cursor.",
         inputSchema: z.object({
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           mode: modeSchema,
           diagram: diagramInputSchema,
+          agentName: agentNameSchema,
         }),
       },
-      async ({ boardId, mode, diagram }, ctx) => {
+      async ({ boardId, mode, diagram, agentName }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
@@ -171,7 +184,7 @@ const handler = createMcpHandler(
           mode,
           spec: parsed.data,
           createdAt: new Date().toISOString(),
-        });
+        }, resolveAgentName(getClientName(), agentName));
 
         const summary = `"${parsed.data.title}" (${parsed.data.nodes.length} nodes)`;
         return reply(
@@ -239,9 +252,10 @@ const handler = createMcpHandler(
         inputSchema: z.object({
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           ops: z.array(editOpSchema).min(1).max(50),
+          agentName: agentNameSchema,
         }),
       },
-      async ({ boardId, ops }, ctx) => {
+      async ({ boardId, ops, agentName }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
@@ -253,7 +267,7 @@ const handler = createMcpHandler(
           kind: "edit",
           ops,
           createdAt: new Date().toISOString(),
-        });
+        }, resolveAgentName(getClientName(), agentName));
 
         if (status === "no-match") {
           return reply("None of these shapes were found on the saved board. Call get_board_scene again for the current diagramId / nodeId values.", true);
@@ -307,9 +321,10 @@ const handler = createMcpHandler(
           boardId: z.string().min(1).describe("boardId from open_board or create_board"),
           diagramId: z.string().min(1).describe("diagramId from get_board_scene"),
           diagram: diagramInputSchema,
+          agentName: agentNameSchema,
         }),
       },
-      async ({ boardId, diagramId, diagram }, ctx) => {
+      async ({ boardId, diagramId, diagram, agentName }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
@@ -349,7 +364,7 @@ const handler = createMcpHandler(
           mode: current.mode ?? "flowchart",
           spec: parsed.data,
           createdAt: new Date().toISOString(),
-        });
+        }, resolveAgentName(getClientName(), agentName));
 
         if (status === "no-match") {
           return reply("Diagram not found on the saved board. Call get_board_scene for the current diagramIds.", true);

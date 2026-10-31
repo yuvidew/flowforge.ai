@@ -2,6 +2,7 @@ import type { EditOp, PendingItem } from "@/features/workspace/types/types";
 import type { DiagramSpec } from "@/features/workspace/ai/diagram-schema";
 import { buildDiagramSkeleton, originForBackdrop } from "@/features/workspace/ai/diagram-to-elements";
 import type { AiModeId } from "@/features/workspace/ai/prompts";
+import { changedElements, finishLive, isLiveAvailable, mergeById, streamToRoom } from "@/lib/ai-live";
 import { isBoardOpenInBrowser, loadScene, writeScene } from "@/lib/board-scene";
 import { queueDiagram } from "@/lib/boards";
 import { appendElements, bump, fitLabelInShape, skeletonToElements, type SceneElement } from "@/lib/scene-elements";
@@ -107,35 +108,61 @@ const applyPendingItem = (elements: SceneElement[], item: PendingItem) => {
   return { elements: drawDiagram(elements, item.spec, item.mode), applied: true };
 };
 
-// Where every MCP draw / edit / revise goes. With a browser tab open the item is queued (that tab draws it with exact
-// text metrics). Otherwise it is drawn on the server and saved before returning. Any server failure falls back to
-// the queue, so nothing is lost.
-export const submitToBoard = async (boardId: string, item: PendingItem): Promise<SubmitStatus> => {
-  if (await isBoardOpenInBrowser(boardId)) {
+// Where every MCP draw / edit / revise goes. With a browser tab open the result is streamed to everyone on the board
+// shape by shape (with a named AI cursor) and then saved; otherwise it is drawn on the server and saved before returning.
+// Any server failure falls back to the queue, so nothing is lost.
+export const submitToBoard = async (boardId: string, item: PendingItem, agentName = "AI assistant"): Promise<SubmitStatus> => {
+  const open = await isBoardOpenInBrowser(boardId);
+  const live = open && isLiveAvailable();
+
+  // Without Liveblocks configured, an open tab still draws the queued item itself.
+  if (open && !live) {
     await queueDiagram(boardId, item);
     return "queued";
   }
 
   try {
+    // Set once the elements have been shown to the room, so a retry merges them instead of drawing (new ids) again.
+    let streamed: SceneElement[] | null = null;
+
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const scene = await loadScene(boardId);
       if (scene.elements.length > MAX_SERVER_ELEMENTS) break;
 
-      // Items queued earlier are drawn first, so the order the agent sent them in is kept.
-      let elements = scene.elements;
-      for (const queued of scene.pending) elements = applyPendingItem(elements, queued).elements;
-      const mine = applyPendingItem(elements, item);
+      let elements: SceneElement[];
+      let applied = true;
 
-      if (!mine.applied && scene.pending.length === 0) return "no-match";
+      if (streamed) {
+        // Lost the version race after streaming: keep what peers already saw and add it to the newer saved scene.
+        elements = mergeById(scene.elements, streamed);
+      } else {
+        // Items queued earlier are drawn first, so the order the agent sent them in is kept.
+        let next = scene.elements;
+        for (const queued of scene.pending) next = applyPendingItem(next, queued).elements;
+        const mine = applyPendingItem(next, item);
+
+        if (!mine.applied && scene.pending.length === 0) return "no-match";
+        elements = mine.elements;
+        applied = mine.applied;
+
+        if (live && mine.applied) {
+          const changed = changedElements(scene.elements, elements);
+          await streamToRoom(boardId, agentName, changed);
+          streamed = changed;
+        }
+      }
 
       const result = await writeScene({
         projectId: boardId,
-        elements: mine.elements,
+        elements,
         baseVersion: scene.version,
         ackPendingIds: scene.pending.map((queued) => queued.id),
       });
-      // Lost the version race (a tab saved meanwhile): reload and apply again on top of the newer scene.
-      if (result.ok) return mine.applied ? "drawn" : "no-match";
+
+      if (result.ok) {
+        if (live) await finishLive(boardId, agentName, result.version);
+        return applied ? "drawn" : "no-match";
+      }
     }
   } catch (error) {
     console.error("Server-side draw failed, queueing instead", error);
