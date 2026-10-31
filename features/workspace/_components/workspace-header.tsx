@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SaveIcon, Share2Icon } from "lucide-react";
+import { CheckIcon, Share2Icon } from "lucide-react";
 import { useCollaborators } from "../hook/use-collaborators";
 import { useProject } from "../hook/use-project";
 import { WorkspaceNameInput } from "./workspace-name-input";
@@ -42,14 +42,15 @@ export const WorkspaceHeader = () => {
             </div>
 
             <div className="flex items-center gap-3">
-                <Button disabled={isSaving}>
-                   {isSaving ? <Spinner /> : <SaveIcon />}
-                   {isSaving ? "Saving…" : "Save"}
-                </Button>
+                {/* Autosave status — informational only, so plain text rather than a button. */}
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground" role="status" aria-live="polite">
+                    {isSaving ? <Spinner className="size-4" /> : <CheckIcon className="size-4" />}
+                    {isSaving ? "Saving…" : "Saved"}
+                </span>
 
                 {canShare && (
                     <Button variant="outline" onClick={() => setShareOpen(true)}>
-                        <Share2Icon />
+                        <Share2Icon data-icon="inline-start" />
                         Share
                     </Button>
                 )}
