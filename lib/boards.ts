@@ -1,7 +1,7 @@
 import { db, projects, whiteboardData } from "@/db";
 import { COVER_IMAGES } from "@/features/all-files/constants";
 import type { PendingItem, SavedElement } from "@/features/workspace/types/types";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { summarizeScene } from "@/features/workspace/ai/summarize-scene";
 import { readDiagrams } from "@/features/workspace/ai/read-diagrams";
 
@@ -27,29 +27,35 @@ export const getBoardScene = async (boardId: string) => {
 export const getBoardDiagram = async (boardId: string, diagramId: string) =>
     readDiagrams(await getSavedElements(boardId)).find((diagram) => diagram.diagramId === diagramId) ?? null;
 
-// Active boards of a user whose name matches exactly, ignoring case. Limit 2 is enough to tell "ambiguous" from "unique".
-export const findBoardsByName = (email: string, name: string) =>
+// Which workspace to search or create in: a Clerk organization id, "personal" for the user's own boards, or undefined
+// for "any board of the user" (the pre-workspace behaviour).
+export type WorkspaceScope = { orgId: string } | "personal" | undefined;
+
+// Active boards whose name matches exactly, ignoring case. Limit 2 is enough to tell "ambiguous" from "unique".
+// A team workspace lists every member's boards; personal and unscoped lookups only see the user's own.
+export const findBoardsByName = (email: string, name: string, scope?: WorkspaceScope) =>
     db
         .select()
         .from(projects)
         .where(
             and(
-                eq(projects.userEmail, email),
+                scope && scope !== "personal" ? eq(projects.orgId, scope.orgId) : eq(projects.userEmail, email),
+                scope === "personal" ? isNull(projects.orgId) : undefined,
                 eq(projects.isArchived, false),
                 sql`lower(${projects.projectName}) = ${name.trim().toLowerCase()}`,
             ),
         )
         .limit(2);
 
-// A board by id, only if it belongs to the user.
-export const getOwnedBoard = async (email: string, boardId: string) => {
+// A board by id, only if it belongs to the user or to a workspace (orgIds) the user is a member of.
+export const getOwnedBoard = async (email: string, boardId: string, orgIds: string[] = []) => {
     const [row] = await db
         .select()
         .from(projects)
         .where(
             and(
                 eq(projects.projectId, boardId),
-                eq(projects.userEmail, email)
+                or(eq(projects.userEmail, email), orgIds.length > 0 ? inArray(projects.orgId, orgIds) : undefined),
             )
         )
         .limit(1);
@@ -58,13 +64,15 @@ export const getOwnedBoard = async (email: string, boardId: string) => {
 }
 
 // Creates a board the same way POST /api/projects does.
-export const createBoardForUser = async (email: string, name: string) => {
+// orgId puts it in that team workspace; omitted or null creates a personal board.
+export const createBoardForUser = async (email: string, name: string, orgId: string | null = null) => {
     const [row] = await db
         .insert(projects)
         .values({
             projectId: crypto.randomUUID(),
             projectName: name,
             userEmail: email,
+            orgId,
             coverImage: COVER_IMAGES[Math.floor(Math.random() * COVER_IMAGES.length)],
         })
         .returning();

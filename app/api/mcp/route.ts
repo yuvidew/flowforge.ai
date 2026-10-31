@@ -18,6 +18,7 @@ import {
   getBoardScene,
   getOwnedBoard,
   setBoardPublished,
+  type WorkspaceScope,
 } from "@/lib/boards";
 import { editOpSchema } from "@/features/workspace/schema";
 
@@ -54,6 +55,42 @@ const getEmail = (authInfo?: AuthInfo) => {
   return typeof email === "string" ? email : null;
 };
 
+// Team workspaces (Clerk organizations) the signed-in user belongs to.
+const getWorkspaces = async (authInfo?: AuthInfo) => {
+  const userId = authInfo?.extra?.userId;
+  if (typeof userId !== "string") return [];
+
+  const client = await clerkClient();
+  const { data } = await client.users.getOrganizationMembershipList({ userId, limit: 100 });
+  return data.map((membership) => ({ id: membership.organization.id, name: membership.organization.name, role: membership.role }));
+};
+
+// Ids of the user's team workspaces; lets tools open team boards created by other members.
+const getOrgIds = async (authInfo?: AuthInfo) => (await getWorkspaces(authInfo)).map((workspace) => workspace.id);
+
+// Turns the optional workspace name into a search/create scope. "Personal" (or a missing name) means the user's own space.
+// Returns an error message instead when the name is unknown or ambiguous.
+const resolveWorkspace = async (authInfo: AuthInfo | undefined, workspace?: string): Promise<{ scope: WorkspaceScope } | { error: string }> => {
+  if (!workspace) return { scope: undefined };
+  if (workspace.toLowerCase() === "personal") return { scope: "personal" };
+
+  const workspaces = await getWorkspaces(authInfo);
+  const matches = workspaces.filter((item) => item.name.toLowerCase() === workspace.toLowerCase());
+  if (matches.length === 0) {
+    return { error: `No workspace named "${workspace}". Call list_workspaces to see the user's workspaces, or use "Personal".` };
+  }
+  if (matches.length > 1) return { error: `More than one workspace is named "${workspace}". Ask the user which one they mean.` };
+  return { scope: { orgId: matches[0].id } };
+};
+
+const workspaceSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .optional()
+  .describe("Workspace name from list_workspaces, or \"Personal\" for the user's own space. Omit to use any of the user's boards (open) or the Personal space (create).");
+
 // Name the AI tool tells us it is (e.g. "Cursor"); shown on its live cursor so people see who is drawing.
 const agentNameSchema = z
   .string()
@@ -68,18 +105,42 @@ const handler = createMcpHandler(
     const getClientName = () => server.server.getClientVersion?.()?.name ?? null;
 
     server.registerTool(
+      "list_workspaces",
+      {
+        title: "List the user's workspaces",
+        description:
+          "Lists the workspaces the user can use: their Personal space plus every team workspace they are a member of. Pass one of these names as `workspace` to open_board or create_board.",
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async (_args, ctx) => {
+        const email = getEmail(ctx.http?.authInfo);
+        if (!email) return reply("Unauthorized", true);
+
+        const workspaces = await getWorkspaces(ctx.http?.authInfo);
+        return reply(JSON.stringify({ workspaces: [{ name: "Personal", type: "personal" }, ...workspaces.map((item) => ({ name: item.name, type: "team", role: item.role }))] }, null, 2));
+      },
+    );
+
+    server.registerTool(
       "open_board",
       {
         title: "Open an existing board",
         description:
-          "Use when the user wants to work on an EXISTING FlowForge board. Finds it by exact name (case-insensitive) and returns its boardId and workspace URL. There is no way to list boards; the user must give the name.",
-        inputSchema: z.object({ name: z.string().trim().min(1).max(50).describe("Exact board name given by the user") }),
+          "Use when the user wants to work on an EXISTING FlowForge board. Finds it by exact name (case-insensitive) and returns its boardId and workspace URL. Pass `workspace` to look only inside one workspace (see list_workspaces). There is no way to list boards; the user must give the name.",
+        inputSchema: z.object({
+          name: z.string().trim().min(1).max(50).describe("Exact board name given by the user"),
+          workspace: workspaceSchema,
+        }),
       },
-      async ({ name }, ctx) => {
+      async ({ name, workspace }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        const matches = await findBoardsByName(email, name);
+        const resolved = await resolveWorkspace(ctx.http?.authInfo, workspace);
+        if ("error" in resolved) return reply(resolved.error, true);
+
+        const matches = await findBoardsByName(email, name, resolved.scope);
 
         if (matches.length === 0) {
           return reply(`No board named "${name}". Ask the user whether to create it with create_board.`, true);
@@ -96,17 +157,25 @@ const handler = createMcpHandler(
       {
         title: "Create a new board",
         description:
-          "Use when the user wants a NEW board. Returns its boardId and workspace URL. Fails if a board with that name already exists; then use open_board instead.",
-        inputSchema: z.object({ name: z.string().trim().min(1).max(50).describe("Name for the new board") }),
+          "Use when the user wants a NEW board. Pass `workspace` (from list_workspaces) to create it in a team workspace; omit it for the Personal space. Returns its boardId and workspace URL. Fails if a board with that name already exists in that workspace; then use open_board instead.",
+        inputSchema: z.object({
+          name: z.string().trim().min(1).max(50).describe("Name for the new board"),
+          workspace: workspaceSchema,
+        }),
       },
-      async ({ name }, ctx) => {
+      async ({ name, workspace }, ctx) => {
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        if ((await findBoardsByName(email, name)).length > 0) {
-          return reply(`A board named "${name}" already exists. Use open_board to work on it.`, true);
+        // Creating without a workspace keeps the old behaviour: a personal board.
+        const resolved = await resolveWorkspace(ctx.http?.authInfo, workspace ?? "Personal");
+        if ("error" in resolved) return reply(resolved.error, true);
+        const orgId = resolved.scope && resolved.scope !== "personal" ? resolved.scope.orgId : null;
+
+        if ((await findBoardsByName(email, name, resolved.scope)).length > 0) {
+          return reply(`A board named "${name}" already exists${workspace ? ` in ${workspace}` : ""}. Use open_board to work on it.`, true);
         }
-        return reply(describeBoard(await createBoardForUser(email, name)));
+        return reply(describeBoard(await createBoardForUser(email, name, orgId)));
       },
     );
 
@@ -123,7 +192,7 @@ const handler = createMcpHandler(
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        const board = await getOwnedBoard(email, boardId);
+        const board = await getOwnedBoard(email, boardId, await getOrgIds(ctx.http?.authInfo));
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
 
         const scene = await getBoardScene(boardId);
@@ -163,7 +232,7 @@ const handler = createMcpHandler(
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        const board = await getOwnedBoard(email, boardId);
+        const board = await getOwnedBoard(email, boardId, await getOrgIds(ctx.http?.authInfo));
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
 
         const parsed = diagramSchema.safeParse(diagram);
@@ -259,7 +328,7 @@ const handler = createMcpHandler(
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        const board = await getOwnedBoard(email, boardId);
+        const board = await getOwnedBoard(email, boardId, await getOrgIds(ctx.http?.authInfo));
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
 
         const status = await submitToBoard(boardId, {
@@ -296,7 +365,7 @@ const handler = createMcpHandler(
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        const board = await getOwnedBoard(email, boardId);
+        const board = await getOwnedBoard(email, boardId, await getOrgIds(ctx.http?.authInfo));
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
 
         const diagram = await getBoardDiagram(boardId, diagramId);
@@ -328,7 +397,7 @@ const handler = createMcpHandler(
         const email = getEmail(ctx.http?.authInfo);
         if (!email) return reply("Unauthorized", true);
 
-        const board = await getOwnedBoard(email, boardId);
+        const board = await getOwnedBoard(email, boardId, await getOrgIds(ctx.http?.authInfo));
         if (!board) return reply("Board not found. Call open_board or create_board first.", true);
 
         // The target must be saved on the board; the server (not the AI) decides the mode and whether it can be redrawn.
@@ -398,7 +467,7 @@ const verifyToken = async (_req: Request, bearerToken?: string): Promise<AuthInf
   const email = (await client.users.getUser(userId)).primaryEmailAddress?.emailAddress;
   if (!email) return undefined;
 
-  return { token: bearerToken, clientId: verified.clientId, scopes: verified.scopes, extra: { email } };
+  return { token: bearerToken, clientId: verified.clientId, scopes: verified.scopes, extra: { email, userId } };
 };
 
 const authHandler = withMcpAuth(handler, verifyToken, {
