@@ -10,6 +10,9 @@ import { LoadingView } from "@/components/loading-view";
 import { useWhiteboard } from "../hook/use-whiteboard";
 import { useSaveWhiteboard } from "../hook/use-save-whiteboard";
 import { useApplyPendingDiagrams } from "../hook/use-apply-pending-diagrams";
+import { useCollaborators } from "../hook/use-collaborators";
+import { useSceneCollab } from "../hook/use-scene-collab";
+import { WorkspaceCollabCursors } from "./workspace-collab-cursors";
 
 import {
   ArrowRightIcon,
@@ -72,6 +75,8 @@ const measureText = (text: string, fontSize: number, fontFamily: number, lineHei
 
 // Delay after the last canvas change before autosaving.
 const SAVE_DEBOUNCE_MS = 1000;
+// How long to wait for the editing collaborator's own save before saving their changes ourselves (they may have left).
+const REMOTE_SAVE_FALLBACK_MS = 4000;
 
 type OnChange = NonNullable<ExcalidrawProps["onChange"]>;
 
@@ -122,6 +127,26 @@ export const WorkspaceWhiteboard = () => {
   const versionRef = useRef<number | null>(null);
   if (data && versionRef.current === null) versionRef.current = data.version;
 
+  // Only the owner's tab draws MCP-queued diagrams, so a collaborator's tab can't draw the same diagram a second time.
+  const { data: access } = useCollaborators(projectId);
+  const isOwner = access?.role === "owner";
+
+  // Fires if no collaborator announces a save after sending us changes; see armRemoteSaveFallback.
+  const remoteSaveFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A collaborator saved the board: adopt their version (so our next save isn't rejected) and drop the fallback.
+  const handleRemoteSaved = (version: number) => {
+    versionRef.current = Math.max(versionRef.current ?? 0, version);
+    if (remoteSaveFallback.current) clearTimeout(remoteSaveFallback.current);
+  };
+
+  // Real-time canvas sync + cursor sharing with everyone else in the board's room.
+  const { trackChanges, markSynced, onPointerUpdate, announceSaved } = useSceneCollab(
+    excalidrawApi,
+    handleRemoteSaved,
+    () => armRemoteSaveFallback(),
+  );
+
   // Pulls the newer saved scene (e.g. a diagram the MCP server drew while this tab was idle) into the canvas.
   const mergeRemoteScene = async () => {
     if (!excalidrawApi) return;
@@ -130,18 +155,65 @@ export const WorkspaceWhiteboard = () => {
       import("@excalidraw/excalidraw"),
     ]);
     versionRef.current = remote.version;
-    // Forces the next onChange to autosave the merged scene on top of the new version.
+    // Forces the autosave below to run even if the merged scene looks unchanged.
     lastSignature.current = "";
     excalidrawApi.updateScene({
       elements: reconcileElements(excalidrawApi.getSceneElements() as never, remote.elements as never, excalidrawApi.getAppState()),
       captureUpdate: CaptureUpdateAction.NEVER,
     });
+    // Our unsaved edits were already broadcast, so onChange won't see them as new; save explicitly.
+    scheduleSave();
+  };
+
+  // Debounced autosave. Reads the scene when the timer fires (not when it was armed), so edits that arrived from
+  // collaborators in the meantime are included and an older snapshot can never overwrite newer work.
+  const scheduleSave = () => {
+    if (!excalidrawApi) return;
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+
+    saveTimeout.current = setTimeout(() => {
+      const persisted = excalidrawApi.getSceneElementsIncludingDeleted().filter((el) => !isLoadingElement(el.id));
+      const files = excalidrawApi.getFiles();
+      const signature = getSceneSignature(persisted, files);
+      if (signature === lastSignature.current) return;
+      lastSignature.current = signature;
+
+      // Snapshot of the ids to clear with this save; they stay in the ref until the save is confirmed.
+      const sentIds = [...ackIds.current];
+
+      saveAsync({
+        projectId,
+        elements: persisted,
+        appState: pickSavedAppState(excalidrawApi.getAppState()),
+        files,
+        ackPendingIds: sentIds.length > 0 ? sentIds : undefined,
+        baseVersion: versionRef.current ?? undefined,
+      })
+        .then(({ version }) => {
+          versionRef.current = version;
+          ackIds.current = ackIds.current.filter((id) => !sentIds.includes(id));
+          // Lets collaborators base their next save on this version instead of hitting a conflict.
+          announceSaved(version);
+        })
+        .catch((error) => {
+          // 409: the board changed elsewhere; merge it in, which triggers a fresh autosave. Other errors already toasted.
+          if (isAxiosError(error) && error.response?.status === 409) void mergeRemoteScene();
+        });
+    }, SAVE_DEBOUNCE_MS);
+  };
+
+  // A collaborator just changed the board. They normally save it themselves and tell us; if they don't (they closed
+  // the tab first) we save their changes so nothing is lost.
+  const armRemoteSaveFallback = () => {
+    if (remoteSaveFallback.current) clearTimeout(remoteSaveFallback.current);
+    remoteSaveFallback.current = setTimeout(scheduleSave, REMOTE_SAVE_FALLBACK_MS);
   };
 
 
   useEffect(() => {
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
+      if (remoteSaveFallback.current) clearTimeout(remoteSaveFallback.current);
     };
   }, []);
 
@@ -153,7 +225,8 @@ export const WorkspaceWhiteboard = () => {
   }, []);
 
   // Draws diagrams the MCP server queued for this board.
-  useApplyPendingDiagrams(projectId, excalidrawApi, queueAck);
+  // An empty id disables the polling query, so collaborators neither poll nor draw the queue.
+  useApplyPendingDiagrams(isOwner ? projectId : "", excalidrawApi, queueAck);
 
 
   // Excalidraw fires onChange on mount, so seed the signature from the loaded board to skip that first call.
@@ -162,6 +235,8 @@ export const WorkspaceWhiteboard = () => {
       data.elements as { id: string; version: number }[],
       data.files,
     );
+    // Everything loaded from the server is already known to collaborators.
+    markSynced(data.elements as { id: string; version: number; type: string }[]);
   }
 
   // Debounced autosave; only saves when the scene actually changed.
@@ -177,38 +252,18 @@ export const WorkspaceWhiteboard = () => {
       selectedIds.length === 1 ? (elements.find((el) => el.id === selectedIds[0]) ?? null) : null,
     );
 
-    // The temporary "Generating with AI" card must never be saved (or trigger a save while it pulses).
+    // The temporary "Generating with AI" card is local-only: never saved, never shared with collaborators.
     const persisted = elements.filter((el) => !isLoadingElement(el.id));
+
+    // Broadcasts our edits to collaborators; false means this change came from a collaborator (or was only a
+    // pointer/selection change), in which case their own tab does the saving.
+    const isLocalEdit = trackChanges(persisted, files, appState.selectedElementIds);
+    if (!isLocalEdit) return;
+
     const signature = getSceneSignature(persisted, files);
     if (signature === lastSignature.current) return;
 
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
-
-    saveTimeout.current = setTimeout(() => {
-      lastSignature.current = signature;
-
-      // Snapshot of the ids to clear with this save; they stay in the ref until the save is confirmed.
-      const sentIds = [...ackIds.current];
-
-      saveAsync({
-        projectId,
-        elements: persisted,
-        appState: pickSavedAppState(appState),
-        files,
-        ackPendingIds: sentIds.length > 0 ? sentIds : undefined,
-        baseVersion: versionRef.current ?? undefined,
-      })
-        .then(({ version }) => {
-          versionRef.current = version;
-          ackIds.current = ackIds.current.filter((id) => !sentIds.includes(id));
-        })
-        .catch((error) => {
-          // 409: the board changed elsewhere; merge it in, which triggers a fresh autosave. Other errors already toasted.
-          if (isAxiosError(error) && error.response?.status === 409) void mergeRemoteScene();
-        });
-
-    }, SAVE_DEBOUNCE_MS);
-
+    scheduleSave();
   };
 
   // Applies a property patch to the selected element. Bumps version/versionNonce (as Excalidraw does internally)
@@ -344,7 +399,10 @@ export const WorkspaceWhiteboard = () => {
         }}
         excalidrawAPI={setExcalidrawApi}
         onChange={handleCanvasChange}
+        onPointerUpdate={onPointerUpdate}
       />
+
+      <WorkspaceCollabCursors excalidrawApi={excalidrawApi} />
 
       <FloatingBox
         selectedElement={selectedElement}

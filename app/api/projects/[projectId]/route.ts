@@ -1,12 +1,13 @@
 import { db, projects, whiteboardData } from "@/db";
 import { updateProjectSchema } from "@/features/all-files/schema";
+import { getBoardAccess } from "@/lib/board-access";
 import { currentUser } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = { params: Promise<{ projectId: string }> };
 
-// Returns a single board owned by the signed-in user (used by the workspace header).
+// Returns a single board the signed-in user owns or was invited to (used by the workspace header).
 export const GET = async (_req: NextRequest, { params }: RouteContext) => {
     try {
         const user = await currentUser();
@@ -18,17 +19,14 @@ export const GET = async (_req: NextRequest, { params }: RouteContext) => {
 
         const { projectId } = await params;
 
-        const [row] = await db
-            .select()
-            .from(projects)
-            .where(and(eq(projects.projectId, projectId), eq(projects.userEmail, email)))
-            .limit(1);
+        // Owners and invited collaborators can open the board.
+        const access = await getBoardAccess(email, projectId);
 
-        if (!row) {
+        if (!access) {
             return NextResponse.json({ error: "Board not found" }, { status: 404 });
         }
 
-        return NextResponse.json(row);
+        return NextResponse.json(access.board);
     } catch (error) {
         console.error("GET /api/projects/[projectId] failed", error);
         return NextResponse.json({ error: "Failed to load board" }, { status: 500 });

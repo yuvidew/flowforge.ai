@@ -1,5 +1,6 @@
 import { db, projects, whiteboardData } from "@/db";
 import { saveWhiteboardSchema } from "@/features/workspace/schema";
+import { getBoardAccess } from "@/lib/board-access";
 import { currentUser } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -9,14 +10,10 @@ import { writeScene } from "@/lib/board-scene";
 
 
 
-// Finds the project only if it belongs to the given user email (ownership check shared by GET/POST).
-const getOwnedProject = async (projectId: string, email: string) => {
-    const [project] = await db
-        .select({ projectId: projects.projectId })
-        .from(projects)
-        .where(and(eq(projects.projectId, projectId), eq(projects.userEmail, email)))
-        .limit(1);
-    return project;
+// Finds the project only if the user owns it or was invited to it (access check shared by GET/POST).
+const getAccessibleProject = async (projectId: string, email: string) => {
+    const access = await getBoardAccess(email, projectId);
+    return access ? { projectId: access.board.projectId } : undefined;
 };
 
 // Saves (upserts) the whiteboard for a project owned by the signed-in user.
@@ -43,7 +40,7 @@ export const POST = async (req: NextRequest) => {
         const { projectId, elements, appState, files, ackPendingIds, baseVersion } = parsed.data;
 
         // Ownership check: the project must belong to the signed-in user.
-        const project = await getOwnedProject(projectId, email);
+        const project = await getAccessibleProject(projectId, email);
 
         if (!project) {
             return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -82,7 +79,7 @@ export const GET = async (req: NextRequest) => {
             return NextResponse.json({ error: "Project id is required" }, { status: 400 });
         }
 
-        const project = await getOwnedProject(projectId, email);
+        const project = await getAccessibleProject(projectId, email);
 
         if (!project) {
             return NextResponse.json({ error: "Project not found" }, { status: 404 });

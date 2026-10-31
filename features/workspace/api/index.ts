@@ -1,6 +1,6 @@
 import { api } from "@/lib/axios"
 import type { Project } from "@/features/all-files/types"
-import type { AckPendingDiagramsRequest, ChatMessagesPage, ChatResponse, ChatSessionItem, GenerateDiagramRequest, PendingDiagramsResponse, PublicWhiteboardResponse, RenameChatSessionRequest, ReviseDiagramRequest, SaveWhiteboardRequest, SendChatMessageRequest, UpdateChatMessageRequest, WhiteboardResponse } from "../types/types"
+import type { AckPendingDiagramsRequest, CollaboratorsResponse, ChatMessagesPage, ChatResponse, ChatSessionItem, GenerateDiagramRequest, PendingDiagramsResponse, PublicWhiteboardResponse, RenameChatSessionRequest, ReviseDiagramRequest, SaveWhiteboardRequest, SendChatMessageRequest, UpdateChatMessageRequest, WhiteboardResponse } from "../types/types"
 import type { DiagramSpec } from "../ai/diagram-schema"
 
 // Fetches the saved whiteboard for a project.
@@ -84,5 +84,23 @@ export const reviseDiagram = async (values: ReviseDiagramRequest) => {
 // Rewrites the text of a saved assistant message (used when the canvas step failed after the reply was saved).
 export const updateChatMessage = async ({ sessionId, messageId, content }: UpdateChatMessageRequest) => {
     const { data } = await api.patch<{ success: boolean }>(`/ai/chat-sessions/${sessionId}/messages/${messageId}`, { content })
+    return data
+}
+
+// Lists the board's owner and invited collaborators, plus the signed-in user's own role.
+export const getCollaborators = async (projectId: string) => {
+    const { data } = await api.get<CollaboratorsResponse>(`/projects/${projectId}/collaborators`)
+    return data
+}
+
+// Invites someone to the board by email (owner only).
+export const addCollaborator = async ({ projectId, email }: { projectId: string; email: string }) => {
+    const { data } = await api.post<{ email: string }>(`/projects/${projectId}/collaborators`, { email })
+    return data
+}
+
+// Removes an invited collaborator (owner only); the body carries the email.
+export const removeCollaborator = async ({ projectId, email }: { projectId: string; email: string }) => {
+    const { data } = await api.delete<{ success: boolean }>(`/projects/${projectId}/collaborators`, { data: { email } })
     return data
 }

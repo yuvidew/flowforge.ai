@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import type { ackPendingDiagramsSchema, chatRequestSchema, editDiagramSchema, editOpSchema, editOpsResultSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, pendingReviseSchema, reviseDiagramSchema, saveWhiteboardSchema } from "../schema"
+import type { ackPendingDiagramsSchema, chatRequestSchema, editDiagramSchema, editOpSchema, editOpsResultSchema, generateDiagramSchema, pendingDiagramSchema, pendingEditSchema, pendingReviseSchema, reviseDiagramSchema, saveWhiteboardSchema, addCollaboratorSchema } from "../schema"
 import type { AiModeId } from "../ai/prompts"
 import { DiagramSpec } from "../ai/diagram-schema"
 
@@ -146,3 +146,10 @@ export type WriteSceneResult = { ok: true; version: number } | { ok: false; serv
 
 
 
+
+
+// Body sent to POST /api/projects/[id]/collaborators.
+export type AddCollaboratorRequest = z.infer<typeof addCollaboratorSchema>
+
+// Response of GET /api/projects/[id]/collaborators; `role` is the signed-in user's own role on the board.
+export type CollaboratorsResponse = { owner: string; role: "owner" | "collaborator"; collaborators: string[] }
