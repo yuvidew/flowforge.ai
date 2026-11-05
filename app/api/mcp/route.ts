@@ -123,6 +123,39 @@ const handler = createMcpHandler(
     );
 
     server.registerTool(
+      "create_workspace",
+      {
+        title: "Create a new team workspace",
+        description:
+          "Use when the user wants a NEW team workspace (e.g. \"create a workspace called X\"). Creates it with the user as admin, then returns its name so it can be passed as `workspace` to create_board. Fails if the user already has a workspace with that name; then use it as is.",
+        inputSchema: z.object({
+          name: z.string().trim().min(1).max(100).describe("Name for the new team workspace"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      async ({ name }, ctx) => {
+        const email = getEmail(ctx.http?.authInfo);
+        const userId = ctx.http?.authInfo?.extra?.userId;
+        if (!email || typeof userId !== "string") return reply("Unauthorized", true);
+
+        const existing = await getWorkspaces(ctx.http?.authInfo);
+        if (existing.some((item) => item.name.toLowerCase() === name.toLowerCase())) {
+          return reply(`A workspace named "${name}" already exists. Use it as the \`workspace\` argument of create_board.`, true);
+        }
+
+        try {
+          const client = await clerkClient();
+          const organization = await client.organizations.createOrganization({ name, createdBy: userId });
+          return reply(JSON.stringify({ name: organization.name, type: "team", role: "org:admin" }, null, 2));
+        } catch (error) {
+          // Clerk rejects creation when the user hit their organization limit or organizations are disabled.
+          const message = error instanceof Error ? error.message : "Unknown error";
+          return reply(`Couldn't create the workspace: ${message}. The user can create it in the FlowForge web app instead.`, true);
+        }
+      },
+    );
+
+    server.registerTool(
       "open_board",
       {
         title: "Open an existing board",
