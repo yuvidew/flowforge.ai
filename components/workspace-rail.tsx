@@ -94,6 +94,23 @@ export const WorkspaceRail = () => {
   // Id being switched to ("personal" for no organization), to show a spinner and ignore double clicks.
   const [switchingTo, setSwitchingTo] = React.useState<string | null>(null)
 
+  // Workspaces can be created outside this tab (e.g. by an AI client through the MCP server), so refetch the lists when the tab regains focus and every 30s.
+  React.useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return
+      userMemberships.revalidate?.()
+      userInvitations.revalidate?.()
+    }
+    const interval = window.setInterval(refresh, 30_000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [userMemberships.revalidate, userInvitations.revalidate])
+
   // Makes an organization (or null = Personal) the active workspace, drops the previous workspace's cached boards, and goes to its board list.
   const switchTo = async (organizationId: string | null) => {
     if (!setActive || switchingTo) return
